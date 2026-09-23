@@ -1,0 +1,20 @@
+{
+  "name": "expo-external-player",
+  "version": "1.0.0",
+  "description": "Expo native module for Android external player playback - VLC, MPV, MX Player, etc",
+  "main": "src/index.ts",
+  "types": "src/index.d.ts",
+  "scripts": {
+    "build": "expo-module build",
+    "clean": "expo-module clean"
+  },
+  "keywords": ["expo", "android", "external-player", "vlc", "mpv"],
+  "author": "Streambert",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "expo-modules-core": "~1.12.0"
+  },
+  "peerDependencies": {
+    "expo": "*"
+  }
+}
