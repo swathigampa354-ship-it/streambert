@@ -193,6 +193,17 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("discord-rpc-set-enabled", enabled),
   discordRpcUpdateActivity: (activity) =>
     ipcRenderer.invoke("discord-rpc-update-activity", activity),
+
+  // ── External Player (Android-compatible) ──────────────────────────────────
+  getAvailablePlayers: () => ipcRenderer.invoke("get-available-players"),
+  probeAndroidOpeners: () => ipcRenderer.invoke("probe-android-openers"),
+  startProxyServer: (args) => ipcRenderer.invoke("start-proxy-server", args),
+  stopProxyServer: () => ipcRenderer.invoke("stop-proxy-server"),
+  launchExternalPlayer: (args) =>
+    ipcRenderer.invoke("launch-external-player", args),
+  launchAndroidPlayer: (args) =>
+    ipcRenderer.invoke("launch-android-player", args),
+  getStreamHeaders: (args) => ipcRenderer.invoke("get-stream-headers", args),
 });
 
 if (process.platform === "darwin") {

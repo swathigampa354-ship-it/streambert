@@ -41,6 +41,9 @@ import {
 } from "../components/Icons";
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
+import ExternalPlayerModal from "../components/ExternalPlayerModal";
+import { resolveStreamInfo } from "../utils/externalPlayer/streamResolver.js";
+import { shouldUseExternalPlayer, isAndroid } from "../utils/platform.js";
 import BlockedStatsModal from "../components/BlockedStatsModal";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import MediaCard from "../components/MediaCard";
@@ -132,6 +135,10 @@ export default function MoviePage({
   const [pipOpen, setPipOpen] = useState(false);
   const pipUrlRef = useRef(null); // URL to restore when pop-out closes
   const pipWebContentsIdRef = useRef(null); // cached WebContents ID of the pop-out window
+
+  // ── External Player (Android-compatible) ─────────────────────────────────
+  const [showExternalPlayer, setShowExternalPlayer] = useState(false);
+  const [externalStreamInfo, setExternalStreamInfo] = useState(null);
 
   // Derived: detect anime before any effects so effects can use it
   const isAnime = useMemo(
@@ -663,6 +670,31 @@ export default function MoviePage({
     onHistory({ ...d, media_type: "movie" });
   }, [d, onHistory]);
 
+  // ── External Player Launch ───────────────────────────────────────────────
+  const handleExternalPlayer = useCallback(() => {
+    // Build current embed URL
+    const embedUrl = sourceIsAsync(playerSource)
+      ? resolvedPlayerUrl || getSourceUrl(playerSource, "movie", item.id, null, null, {}, playerAccentColor, playerSubLang)
+      : getSourceUrl(playerSource, "movie", item.id, null, null, {}, playerAccentColor, playerSubLang);
+
+    // Resolve stream info from intercepted m3u8 + embed URL
+    const info = resolveStreamInfo({
+      embedUrl,
+      m3u8Url,
+      sourceId: playerSource,
+      subtitles: interceptedSubs,
+      title: mediaName,
+      season: null,
+      episode: null,
+    });
+
+    setExternalStreamInfo(info);
+    setShowExternalPlayer(true);
+
+    // Also record history
+    onHistory({ ...d, media_type: "movie" });
+  }, [playerSource, resolvedPlayerUrl, item.id, m3u8Url, interceptedSubs, mediaName, d, onHistory, playerAccentColor, playerSubLang]);
+
   // Intercept fullscreen requests from embedded players (vidsrc / 2embed use
   // the native Fullscreen API which would otherwise fullscreen the entire app).
   // Videasy and AllManga handle fullscreen internally via CSS, skip those.
@@ -903,6 +935,9 @@ export default function MoviePage({
                     )}
                   </>
                 ))}
+              <button className="btn btn-secondary" onClick={handleExternalPlayer} title="Play in VLC / MPV / MX Player">
+                📺 External
+              </button>
               <button className="btn btn-ghost" onClick={onBack}>
                 <BackIcon /> Back
               </button>
@@ -1310,6 +1345,17 @@ export default function MoviePage({
           mediaType="movie"
           posterPath={d.poster_path}
           tmdbId={item.id}
+        />
+      )}
+
+      {showExternalPlayer && (
+        <ExternalPlayerModal
+          isOpen={showExternalPlayer}
+          onClose={() => setShowExternalPlayer(false)}
+          streamInfo={externalStreamInfo}
+          onLaunch={(result) => {
+            console.log("[MoviePage] External player launched:", result);
+          }}
         />
       )}
     </div>

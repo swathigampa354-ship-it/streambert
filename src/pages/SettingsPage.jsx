@@ -24,6 +24,7 @@ import {
   UPDATE_SOURCES,
   DEFAULT_UPDATE_SOURCE,
 } from "../utils/updates";
+import ExternalPlayerSettings from "../components/ExternalPlayerSettings";
 import {
   HOME_ROWS,
   loadHomeLayout,
@@ -2599,6 +2600,25 @@ const SECTION_NAV = [
     ],
   },
   {
+    id: "externalPlayer",
+    label: "External Player",
+    icon: "📺",
+    keywords: [
+      "external",
+      "player",
+      "vlc",
+      "mpv",
+      "mx",
+      "android",
+      "intent",
+      "chooser",
+      "proxy",
+      "headers",
+      "subtitle",
+      "just player",
+    ],
+  },
+  {
     id: "subtitles",
     label: "Subtitles",
     icon: "CC",
@@ -3367,6 +3387,7 @@ export default function SettingsPage({
   const secUpdates = useRef(null);
   const secContent = useRef(null);
   const secPlayback = useRef(null);
+  const secExternalPlayer = useRef(null);
   const secSubtitles = useRef(null);
   const secDownloads = useRef(null);
   const secNotifications = useRef(null);
@@ -3380,6 +3401,7 @@ export default function SettingsPage({
     updates: secUpdates,
     content: secContent,
     playback: secPlayback,
+    externalPlayer: secExternalPlayer,
     subtitles: secSubtitles,
     downloads: secDownloads,
     notifications: secNotifications,
@@ -4207,6 +4229,17 @@ export default function SettingsPage({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* GROUP: EXTERNAL PLAYER (Android)                                   */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <div ref={secExternalPlayer} style={{ scrollMarginTop: 80 }}>
+          <SectionGroupHeader
+            title="External Player (Android)"
+            subtitle="VLC, MPV, MX Player integration for Android playback"
+          />
+          <ExternalPlayerSettings />
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════ */}

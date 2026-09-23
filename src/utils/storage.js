@@ -98,6 +98,12 @@ export const STORAGE_KEYS = {
   DISCORD_RPC_SHOW_BUTTON: "discordRpcShowButton",
   // Controller / gamepad navigation
   GAMEPAD_ENABLED: "gamepadEnabled",
+  // External player (Android)
+  EXTERNAL_PLAYER_ENABLED: "externalPlayerEnabled",
+  PREFERRED_EXTERNAL_PLAYER: "preferredExternalPlayer",
+  PLAYBACK_MODE: "playbackMode",
+  USE_PROXY_FOR_EXTERNAL: "useProxyForExternal",
+  ANDROID_SUBTITLE_DIR: "androidSubtitleDir",
 };
 
 export const getApiKey = () => storage.get(STORAGE_KEYS.API_KEY);

@@ -42,6 +42,7 @@ const downloadsIpc = require("./src/ipc/downloads");
 const subtitlesIpc = require("./src/ipc/subtitles");
 const allmangaIpc = require("./src/ipc/allmanga");
 const playerIpc = require("./src/ipc/player");
+const externalPlayerIpc = require("./src/ipc/externalPlayer");
 const discordRpc = require("./src/ipc/discordRpc");
 
 // -- Ad/tracker block list -----------------------------------------------------
@@ -323,6 +324,7 @@ allmangaIpc.register();
 playerIpc.register(getMainWindow, {
   writeSecretMigration: storageIpc.writeSecretMigration,
 });
+externalPlayerIpc.register();
 blockStats.init(getMainWindow);
 discordRpc.register(ipcMain);
 

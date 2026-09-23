@@ -49,6 +49,8 @@ import {
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
+import ExternalPlayerModal from "../components/ExternalPlayerModal";
+import { resolveStreamInfo } from "../utils/externalPlayer/streamResolver.js";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import {
   storage,
@@ -436,6 +438,9 @@ export default function TVPage({
   const pipUrlRef = useRef(null);
   const pipWebContentsIdRef = useRef(null); // cached WebContents ID of the pop-out window
   const [menuPos, setMenuPos] = useState(null);
+  // ── External Player (Android) ───────────────────────────────────────────
+  const [showExternalPlayer, setShowExternalPlayer] = useState(false);
+  const [externalStreamInfo, setExternalStreamInfo] = useState(null);
   // AniSkip
   const [skipTimings, setSkipTimings] = useState(null); // { intro?, outro? }
   const [skipPrompt, setSkipPrompt] = useState(null); // "intro" | "outro" | null
@@ -1578,6 +1583,27 @@ export default function TVPage({
     storage.set("downloaderFolder", folder);
   }, []);
 
+  // ── External Player Launch ───────────────────────────────────────────────
+  const handleExternalPlayer = useCallback(() => {
+    if (!selectedEp) return;
+    const embedUrl = isAsync
+      ? resolvedPlayerUrl || getSourceUrl(playerSource, "tv", item.id, selectedSeason, selectedEp.episode_number, {}, playerAccentColor, playerSubLang)
+      : getSourceUrl(playerSource, "tv", item.id, selectedSeason, selectedEp.episode_number, {}, playerAccentColor, playerSubLang);
+
+    const info = resolveStreamInfo({
+      embedUrl,
+      m3u8Url,
+      sourceId: playerSource,
+      subtitles: interceptedSubs,
+      title: `${title} - S${String(selectedSeason).padStart(2, "0")}E${String(selectedEp.episode_number).padStart(2, "0")}`,
+      season: selectedSeason,
+      episode: selectedEp.episode_number,
+    });
+
+    setExternalStreamInfo(info);
+    setShowExternalPlayer(true);
+  }, [selectedEp, isAsync, resolvedPlayerUrl, playerSource, item.id, selectedSeason, m3u8Url, interceptedSubs, title, playerAccentColor, playerSubLang]);
+
   // Intercept fullscreen requests from embedded players (vidsrc / 2embed use
   // the native Fullscreen API which would otherwise fullscreen the entire app).
   // Videasy and AllManga handle fullscreen internally via CSS, skip those.
@@ -2145,6 +2171,14 @@ export default function TVPage({
                       </span>
                     )}
                   </button>
+                  {/* External player button */}
+                  <button
+                    className="player-overlay-btn"
+                    onClick={handleExternalPlayer}
+                    title="Play in external player (VLC / MPV / MX)"
+                  >
+                    📺
+                  </button>
                   {/* Pop-out button */}
                   <button
                     className="player-overlay-btn"
@@ -2572,6 +2606,17 @@ export default function TVPage({
           episode={selectedEp?.episode_number}
           posterPath={d.poster_path}
           tmdbId={item.id}
+        />
+      )}
+
+      {showExternalPlayer && (
+        <ExternalPlayerModal
+          isOpen={showExternalPlayer}
+          onClose={() => setShowExternalPlayer(false)}
+          streamInfo={externalStreamInfo}
+          onLaunch={(result) => {
+            console.log("[TVPage] External player launched:", result);
+          }}
         />
       )}
     </div>
