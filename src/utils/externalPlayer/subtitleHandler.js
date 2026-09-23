@@ -1,5 +1,7 @@
 // ── Subtitle Handler ─────────────────────────────────────────────────────
-// Manages subtitle downloading, storage, and intent extra mapping for Android.
+// Fixed: Android path uses native bridge, no Electron dependency in pure Android runtime.
+
+import { getPlatform, PLATFORM } from "../platform.js";
 
 /**
  * Extract subtitle language from URL (mirrors Streambert's existing logic)
@@ -10,7 +12,6 @@ export function extractSubtitleLang(url) {
   if (!url) return "unknown";
   try {
     const lower = url.toLowerCase();
-    // Try to parse lang from URL like .../en.vtt or .../english.vtt or ?lang=en
     const match = lower.match(/[\/_-]([a-z]{2,3})(?:-[a-z]{2})?(?:\.vtt|\.srt|\.ass)/);
     if (match) return match[1];
     const urlObj = new URL(url);
@@ -20,11 +21,6 @@ export function extractSubtitleLang(url) {
   return "unknown";
 }
 
-/**
- * Get subtitle extension from URL
- * @param {string} url
- * @returns {string}
- */
 export function getSubtitleExtension(url) {
   if (!url) return ".srt";
   const lower = url.toLowerCase();
@@ -36,15 +32,6 @@ export function getSubtitleExtension(url) {
   return ".srt";
 }
 
-/**
- * Generate safe filename for subtitle
- * @param {string} title
- * @param {number} season
- * @param {number} episode
- * @param {string} lang
- * @param {string} ext
- * @returns {string}
- */
 export function generateSubtitleFilename(title, season, episode, lang, ext) {
   const safeTitle = (title || "subtitle").replace(/[^a-zA-Z0-9 _-]/g, "").trim().substring(0, 50) || "subtitle";
   if (season != null && episode != null) {
@@ -55,21 +42,28 @@ export function generateSubtitleFilename(title, season, episode, lang, ext) {
 
 /**
  * Get Android shared storage path for subtitles
+ * Android native path: /sdcard/Download/StreambertSubs (no Electron)
  * @returns {string}
  */
 export function getAndroidSubtitleDir() {
-  // MovieBox-TUI uses ~/storage/downloads/moviebox_subs or /sdcard/Download/moviebox_subs
-  // For Streambert, use similar: /sdcard/Download/StreambertSubs
-  // In Termux, ~/storage/downloads/ is symlink to /sdcard/Download
-  if (typeof window !== "undefined" && window.__STREAMBERT_ANDROID__?.subtitleDir) {
-    return window.__STREAMBERT_ANDROID__.subtitleDir;
+  // Try native bridge first (pure Android, no Electron)
+  if (typeof window !== "undefined") {
+    if (window.StreambertNative?.subtitleDir) {
+      return window.StreambertNative.subtitleDir;
+    }
+    // For Capacitor, the bridge will provide dir via async method, but sync fallback:
+    if (window.Capacitor) {
+      return "/sdcard/Download/StreambertSubs";
+    }
   }
-  // Fallback paths to try
   return "/sdcard/Download/StreambertSubs";
 }
 
 /**
- * Download subtitle to local file (for Electron/desktop)
+ * Download subtitle to local file
+ * Desktop: uses Electron IPC (isolated, not in Android path)
+ * Android: uses native bridge (no Electron)
+ * Web: fetch blob (fallback)
  * @param {string} url
  * @param {string} destPath
  * @param {Object} headers
@@ -78,25 +72,35 @@ export function getAndroidSubtitleDir() {
 export async function downloadSubtitle(url, destPath, headers = {}) {
   if (!url) return false;
 
-  // If Electron, use IPC
-  if (typeof window !== "undefined" && window.electron?.downloadSubtitlesForFile) {
+  const platform = getPlatform();
+
+  if (platform === PLATFORM.DESKTOP) {
+    // Desktop only: Electron IPC
+    if (typeof window !== "undefined" && window.electron?.downloadSubtitlesForFile) {
+      try {
+        const result = await window.electron.downloadSubtitlesForFile({ url, destPath, headers });
+        return !!result?.ok;
+      } catch {
+        return false;
+      }
+    }
+  } else if (platform === PLATFORM.ANDROID) {
+    // Android: native bridge (no Electron)
     try {
-      const result = await window.electron.downloadSubtitlesForFile({ url, destPath, headers });
-      return !!result?.ok;
+      const { downloadSubtitleNative } = await import("./androidBridge.js");
+      const filename = destPath.split("/").pop() || "subtitle.srt";
+      const result = await downloadSubtitleNative(url, filename, headers);
+      return !!result;
     } catch {
       return false;
     }
   }
 
-  // Browser fetch fallback
+  // Web fallback
   try {
-    const response = await fetch(url, {
-      headers: headers,
-    });
+    const response = await fetch(url, { headers });
     if (!response.ok) return false;
-    const blob = await response.blob();
-    // In browser, we can't write to filesystem directly; return blob URL
-    // For Android, this will be handled by native bridge
+    await response.blob();
     return true;
   } catch {
     return false;
@@ -105,6 +109,7 @@ export async function downloadSubtitle(url, destPath, headers = {}) {
 
 /**
  * Prepare subtitle for external player launch
+ * Android path: NO Electron, uses native bridge for download to shared storage
  * @param {Object} subtitle - {url, lang}
  * @param {Object} mediaInfo - {title, season, episode}
  * @param {Object} headers
@@ -123,18 +128,25 @@ export async function prepareSubtitleForPlayer(subtitle, mediaInfo = {}, headers
     ext
   );
 
-  // For Android, we want to download to shared storage
-  // For now, return remote URL and intended local path
-  // Actual download will be done by native bridge or main process
-
   const androidDir = getAndroidSubtitleDir();
   const localPath = `${androidDir}/${filename}`;
 
-  // If we're in Electron, try to download via IPC to temp dir
-  if (typeof window !== "undefined" && window.electron) {
-    // Use Electron's temp handling
+  const platform = getPlatform();
+
+  if (platform === PLATFORM.DESKTOP) {
+    // Desktop: Electron handles temp
     return {
-      localPath: null, // will be handled by main process
+      localPath: null,
+      remoteUrl: subtitle.url,
+      lang,
+      filename,
+      androidPath: localPath,
+    };
+  } else if (platform === PLATFORM.ANDROID) {
+    // Android: try native download, but return intended path immediately
+    // Actual download will be done by caller via androidBridge
+    return {
+      localPath,
       remoteUrl: subtitle.url,
       lang,
       filename,
@@ -142,7 +154,7 @@ export async function prepareSubtitleForPlayer(subtitle, mediaInfo = {}, headers
     };
   }
 
-  // For Android Capacitor, native bridge will handle download
+  // Web
   return {
     localPath,
     remoteUrl: subtitle.url,
@@ -152,13 +164,6 @@ export async function prepareSubtitleForPlayer(subtitle, mediaInfo = {}, headers
   };
 }
 
-/**
- * Prepare multiple subtitles
- * @param {Array} subtitles
- * @param {Object} mediaInfo
- * @param {Object} headers
- * @returns {Promise<Array>}
- */
 export async function prepareSubtitlesForPlayer(subtitles, mediaInfo, headers) {
   if (!subtitles || !subtitles.length) return [];
   const results = [];
@@ -169,20 +174,11 @@ export async function prepareSubtitlesForPlayer(subtitles, mediaInfo, headers) {
   return results;
 }
 
-/**
- * Get best subtitle (e.g., English preferred) for single-subtitle players
- * @param {Array} subtitles
- * @param {string} preferredLang - e.g., "en"
- * @returns {Object|null}
- */
 export function getBestSubtitle(subtitles, preferredLang = "en") {
   if (!subtitles || !subtitles.length) return null;
-  // Prefer requested lang
   const preferred = subtitles.find(s => s.lang?.toLowerCase().startsWith(preferredLang.toLowerCase()));
   if (preferred) return preferred;
-  // Prefer English
   const english = subtitles.find(s => s.lang?.toLowerCase().startsWith("en"));
   if (english) return english;
-  // First one
   return subtitles[0];
 }

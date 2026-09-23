@@ -81,7 +81,7 @@ export function headersArrayToObject(arr) {
 /**
  * Check if headers require proxy (e.g., Cookie, Authorization that cannot be passed via intent)
  * Based on MovieBox-TUI logic: VLC can receive User-Agent/Referer via flags, but Cookie needs proxy.
- * Android intent via termux-am can only pass User-Agent and Referer as extras, not Cookie.
+ * Android native Intent via ExternalPlayerPlugin can only pass User-Agent and Referer as extras, not Cookie (same as termux-am legacy).
  * @param {Object} headers
  * @param {Object} player - PlayerInfo
  * @returns {boolean}
@@ -129,7 +129,7 @@ export function analyzeProxyNeed(headers, streamType, player) {
   }
 
   // HLS with Referer: many Android players ignore Referer extra, so proxy is safer
-  // But termux-am does forward Referer, so not always needed. We check player capability.
+  // Android native Intent (ExternalPlayerPlugin) forwards Referer via extras, but some players ignore it. Check player capability.
   if (player && !player.supportsHeaders && lowerKeys.includes("referer")) {
     return { needed: true, reason: `${player.label} doesn't support Referer header directly, proxy needed` };
   }

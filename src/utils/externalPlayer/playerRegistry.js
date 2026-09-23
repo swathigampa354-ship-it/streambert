@@ -111,7 +111,7 @@ export const KNOWN_PLAYERS = [
     intentExtras: [],
     detectionMethod: "chooser",
     mimeType: "video/*",
-    notes: "Uses termux-open --chooser which triggers Android system chooser dialog.",
+    notes: "Uses Android native Intent chooser (Intent.createChooser) to show all compatible apps - no Termux needed.",
   },
 ];
 
@@ -162,12 +162,19 @@ export function getSystemPlayers() {
   return KNOWN_PLAYERS.filter(p => p.type === "system");
 }
 
-// Android opener types (mirroring MovieBox-TUI Rust enum)
+// Android opener types - REAL Android-native only (no Termux)
+// Termux types kept as legacy but marked deprecated
 export const AndroidOpenerType = {
-  TERMUX_AM: "termux-am",
-  TERMUX_OPEN: "termux-open",
-  TERMUX_OPEN_URL: "termux-open-url",
-  SYSTEM_AM: "system-am",
-  CAPACITOR_INTENT: "capacitor-intent",
+  // Real Android-native (no Termux, no Electron)
+  CAPACITOR_EXTERNAL_PLAYER: "capacitor-externalplayer",
+  STREAMBERT_NATIVE: "streambert-native",
+  INTENT_URI: "intent-uri",
+  SYSTEM_CHOOSER: "system-chooser",
+  // Legacy (deprecated, NOT for pure Android runtime)
+  TERMUX_AM: "termux-am-legacy",
+  TERMUX_OPEN: "termux-open-legacy",
+  TERMUX_OPEN_URL: "termux-open-url-legacy",
+  SYSTEM_AM: "system-am-legacy",
+  CAPACITOR_INTENT: "capacitor-intent", // old name, use CAPACITOR_EXTERNAL_PLAYER
   WEB_INTENT: "web-intent",
 };

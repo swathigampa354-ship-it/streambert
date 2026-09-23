@@ -22,6 +22,9 @@
     "dist:mac": "cross-env ELECTRON_DIST=1 vite build && electron-builder --mac --universal --publish never"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
+    "@capacitor/core": "^6.2.2",
     "approve": "^0.0.12",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

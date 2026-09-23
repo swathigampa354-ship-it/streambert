@@ -1,6 +1,5 @@
 // ── Platform detection & abstraction ────────────────────────────────────────
-// Used to separate Desktop (Electron) and Android (Capacitor / Termux) logic
-// without breaking existing desktop functionality.
+// Fixed to remove invalid Android dependencies (no Electron/Node/Termux in Android path)
 
 export const PLATFORM = {
   DESKTOP: "desktop",
@@ -8,35 +7,69 @@ export const PLATFORM = {
   WEB: "web",
 };
 
+// Pure detection helpers — no Node/Electron in Android path
+
+export function isCapacitor() {
+  return typeof window !== "undefined" && !!window.Capacitor;
+}
+
+export function isCapacitorAndroid() {
+  if (!isCapacitor()) return false;
+  try {
+    if (window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+      const p = window.Capacitor.getPlatform?.();
+      return p === "android";
+    }
+  } catch {}
+  return false;
+}
+
+export function isElectronRenderer() {
+  return typeof window !== "undefined" && !!window.electron;
+}
+
+export function isAndroidWebView() {
+  if (typeof window === "undefined") return false;
+  // Check for Android bridge injected by native WebView (Capacitor or custom)
+  if (window.Capacitor && isCapacitorAndroid()) return true;
+  // Check for custom native bridge (future APK)
+  if (window.StreambertNative && window.StreambertNative.platform === "android") return true;
+  // Check user agent for Android + existence of native bridge (not Termux)
+  const ua = navigator.userAgent || "";
+  if (/Android/i.test(ua)) {
+    // If we have any native bridge, treat as Android
+    if (window.AndroidBridge || window.StreambertNative || isCapacitorAndroid()) {
+      return true;
+    }
+    // For pure web testing, allow override via localStorage
+    try {
+      const override = localStorage.getItem("streambert_platform_override");
+      if (override === "android") return true;
+    } catch {}
+  }
+  return false;
+}
+
 export function getPlatform() {
-  // Check for Capacitor (Android APK)
+  // Priority: Capacitor Android > Custom Native Android > Electron > Web
+  if (isCapacitorAndroid() || isAndroidWebView()) {
+    return PLATFORM.ANDROID;
+  }
+  if (isElectronRenderer()) {
+    return PLATFORM.DESKTOP;
+  }
+  // Node main process (Electron main)
+  if (typeof process !== "undefined" && process.versions && process.versions.electron) {
+    return PLATFORM.DESKTOP;
+  }
+  // Fallback via localStorage override for testing
   if (typeof window !== "undefined") {
-    // Capacitor global
-    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-      const capPlatform = window.Capacitor.getPlatform?.();
-      if (capPlatform === "android") return PLATFORM.ANDROID;
-    }
-    // Custom flag set by Android bridge
-    if (window.__STREAMBERT_ANDROID__) return PLATFORM.ANDROID;
-    // Electron renderer
-    if (window.electron) return PLATFORM.DESKTOP;
-    // Termux / Android browser detection via user agent or env
-    const ua = navigator.userAgent || "";
-    if (/Android/i.test(ua) && typeof window.AndroidBridge !== "undefined") {
-      return PLATFORM.ANDROID;
-    }
-    // Fallback: if localStorage has explicit platform override
     try {
       const override = localStorage.getItem("streambert_platform_override");
       if (override === "android") return PLATFORM.ANDROID;
       if (override === "desktop") return PLATFORM.DESKTOP;
     } catch {}
   }
-  // Node/Electron main process
-  if (typeof process !== "undefined" && process.versions && process.versions.electron) {
-    return PLATFORM.DESKTOP;
-  }
-  // Default to web (for testing) but treat as desktop-like
   return PLATFORM.WEB;
 }
 
@@ -50,7 +83,7 @@ export function isDesktop() {
 }
 
 export function isElectron() {
-  return typeof window !== "undefined" && !!window.electron;
+  return isElectronRenderer();
 }
 
 // Playback mode setting: internal (webview) vs external (Android player)
@@ -86,4 +119,9 @@ export function shouldUseExternalPlayer() {
   if (mode === PLAYBACK_MODE.INTERNAL) return false;
   // AUTO
   return isAndroid();
+}
+
+// Helper to check if we are in Android runtime without Electron/Termux
+export function isPureAndroidRuntime() {
+  return isAndroid() && !isElectronRenderer();
 }

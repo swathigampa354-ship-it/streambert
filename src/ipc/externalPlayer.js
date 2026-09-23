@@ -1,9 +1,7 @@
-// ── IPC: External Player (Android-compatible playback) ─────────────────────
-// Handles:
-// - Detection of available desktop players (mpv, vlc)
-// - Probing Android openers (termux-am, termux-open, etc.) for simulation
-// - Launching external players with headers/subtitles
-// - Local proxy server for header-protected streams (Cookie, etc.)
+// ── IPC: External Player (Desktop only) ───────────────────────────────────
+// Fixed: This file is DESKTOP ONLY (Electron main process).
+// Android runtime does NOT use this file — it uses native Java plugin (ExternalPlayerPlugin.java)
+// No Termux dependencies in Android path. Termux code removed.
 
 const { ipcMain } = require("electron");
 const { spawn, spawnSync } = require("child_process");
@@ -11,10 +9,9 @@ const path = require("path");
 const fs = require("fs");
 const http = require("http");
 const https = require("https");
-const os = require("os");
 
-// ── Proxy Server (main process) ────────────────────────────────────────────
-// Re-implementation of proxyServer.js logic for main process (Node)
+// ── Proxy Server (Desktop main process) ────────────────────────────────────
+// Node http server for desktop only. Android uses AndroidProxyServer.java (NanoHTTPD)
 
 class MainProxyServer {
   constructor() {
@@ -82,9 +79,7 @@ class MainProxyServer {
         this.port = addr.port;
         this.isRunning = true;
         this.startWatchdog();
-        const proxyPath = targetUrl.startsWith("https://")
-          ? `/https/${targetUrl.slice(8)}`
-          : `/http/${targetUrl.slice(7)}`;
+        const proxyPath = targetUrl.startsWith("https://") ? `/https/${targetUrl.slice(8)}` : `/http/${targetUrl.slice(7)}`;
         const proxyUrl = `http://127.0.0.1:${this.port}${proxyPath}`;
         console.log(`[MainProxy] Started port ${this.port} -> ${targetUrl}`);
         resolve({ port: this.port, proxyUrl });
@@ -254,10 +249,7 @@ class MainProxyServer {
   }
 }
 
-// Singleton proxy
 let globalProxy = null;
-
-// ── Player detection (desktop) ─────────────────────────────────────────────
 
 function findInPath(bin) {
   const whichCmd = process.platform === "win32" ? "where" : "which";
@@ -274,7 +266,6 @@ function detectDesktopPlayers() {
   const players = [];
   if (findInPath("mpv")) players.push("mpv");
   if (findInPath("vlc")) players.push("vlc");
-  // Check common paths
   const commonChecks = [
     { id: "mpv", paths: process.platform === "win32" ? ["C:\\Program Files\\mpv\\mpv.exe"] : ["/usr/bin/mpv", "/usr/local/bin/mpv"] },
     { id: "vlc", paths: process.platform === "win32" ? ["C:\\Program Files\\VideoLAN\\VLC\\vlc.exe"] : ["/usr/bin/vlc"] },
@@ -291,159 +282,14 @@ function detectDesktopPlayers() {
   return players;
 }
 
-// ── Android opener probing (for simulation & Termux env) ────────────────────
-
-function probeAndroidOpeners() {
-  const openers = [];
-
-  // Check env override
-  const custom = process.env.MOVIEBOX_ANDROID_PLAYER_PATH;
-  if (custom) {
-    if (custom.endsWith("termux-open-url")) openers.push({ type: "termux-open-url", path: custom });
-    else if (custom.endsWith("termux-am")) openers.push({ type: "termux-am", path: custom });
-    else openers.push({ type: "termux-open", path: custom });
-    return openers;
-  }
-
-  // Check PREFIX (Termux)
-  const prefix = process.env.PREFIX || "/data/data/com.termux/files/usr";
-  const candidates = [
-    { type: "termux-am", path: `${prefix}/bin/termux-am` },
-    { type: "termux-open", path: `${prefix}/bin/termux-open` },
-    { type: "termux-open-url", path: `${prefix}/bin/termux-open-url` },
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c.path)) openers.push(c);
-  }
-
-  // Check PATH
-  const pathChecks = [
-    { type: "termux-am", bin: "termux-am" },
-    { type: "termux-open", bin: "termux-open" },
-    { type: "termux-open-url", bin: "termux-open-url" },
-  ];
-  for (const check of pathChecks) {
-    const found = findInPath(check.bin);
-    if (found && !openers.some(o => o.path === found)) {
-      openers.push({ type: check.type, path: found });
-    }
-  }
-
-  // System am (root)
-  if (process.platform !== "win32") {
-    const systemAm = "/system/bin/am";
-    if (fs.existsSync(systemAm)) {
-      openers.push({ type: "system-am", path: systemAm });
-    }
-    const amInPath = findInPath("am");
-    if (amInPath && !openers.some(o => o.path === amInPath)) {
-      openers.push({ type: "system-am", path: amInPath });
-    }
-  }
-
-  return openers;
-}
-
-// ── Launch helpers ─────────────────────────────────────────────────────────
-
-function buildSubtitleExtras(subtitlePath) {
-  if (!subtitlePath) return [];
-  return [
-    ["-e", "subtitles_location", subtitlePath],
-    ["--eu", "subtitles_location", subtitlePath],
-    ["-e", "subs", subtitlePath],
-    ["--esal", "subs", subtitlePath],
-    ["-e", "subs.enable", subtitlePath],
-    ["--esal", "subs.enable", subtitlePath],
-    ["-e", "sub", subtitlePath],
-    ["--eu", "sub", subtitlePath],
-    ["-e", "title_subtitle", subtitlePath],
-  ];
-}
-
-function buildHeaderExtras(headers) {
-  const extras = [];
-  if (!headers) return extras;
-  for (const [k, v] of Object.entries(headers)) {
-    const lower = k.toLowerCase();
-    if (lower === "user-agent") extras.push(["-e", "User-Agent", v]);
-    else if (lower === "referer") extras.push(["-e", "Referer", v]);
-  }
-  return extras;
-}
-
-function launchViaTermuxAm(url, options) {
-  const { subtitle, headers, packageName, title, mimeType = "video/*", openerPath = "termux-am" } = options;
-
-  const args = ["start", "-a", "android.intent.action.VIEW", "-d", url, "-t", mimeType];
-
-  if (packageName) {
-    args.push("-n", packageName);
-  }
-
-  if (title) {
-    args.push("-e", "title", title);
-    args.push("-e", "android.intent.extra.TITLE", title);
-  }
-
-  for (const [flag, key, val] of buildHeaderExtras(headers)) {
-    args.push(flag, key, val);
-  }
-
-  if (subtitle) {
-    for (const [flag, key, val] of buildSubtitleExtras(subtitle)) {
-      args.push(flag, key, val);
-    }
-  }
-
-  return new Promise((resolve, reject) => {
-    const proc = spawn(openerPath, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    let stdout = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.stderr.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => {
-      if (code === 0) resolve({ ok: true, opener: "termux-am", stdout, stderr });
-      else reject(new Error(`termux-am exited ${code}: ${stderr || stdout}`));
-    });
-    proc.on("error", reject);
-  });
-}
-
-function launchViaTermuxOpen(url, options) {
-  const { mimeType = "video/*", openerPath = "termux-open" } = options;
-  const args = ["--chooser", "--content-type", mimeType, url];
-
-  return new Promise((resolve, reject) => {
-    const proc = spawn(openerPath, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    let stdout = "";
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.stderr.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => {
-      if (code === 0) resolve({ ok: true, opener: "termux-open", stdout, stderr });
-      else reject(new Error(`termux-open exited ${code}: ${stderr || stdout}`));
-    });
-    proc.on("error", reject);
-  });
-}
-
-// ── IPC Registration ───────────────────────────────────────────────────────
-
 function register() {
-  // Get available desktop players
+  // Desktop only: get available desktop players (mpv, vlc)
   ipcMain.handle("get-available-players", () => {
     const players = detectDesktopPlayers();
     return { ok: true, players };
   });
 
-  // Probe Android openers
-  ipcMain.handle("probe-android-openers", () => {
-    const openers = probeAndroidOpeners();
-    return { ok: true, openers };
-  });
-
-  // Start proxy server
+  // Desktop proxy (Node http) — NOT for Android
   ipcMain.handle("start-proxy-server", async (_, { targetUrl, headers, subtitleUrl }) => {
     try {
       if (!globalProxy) globalProxy = new MainProxyServer();
@@ -454,7 +300,6 @@ function register() {
     }
   });
 
-  // Stop proxy server
   ipcMain.handle("stop-proxy-server", async () => {
     try {
       if (globalProxy) {
@@ -467,11 +312,9 @@ function register() {
     }
   });
 
-  // Launch external player (desktop)
+  // Desktop: launch external player (mpv, vlc, system)
   ipcMain.handle("launch-external-player", async (_, { url, playerId, headers, subtitle, title, mimeType }) => {
     try {
-      // For desktop, use existing player.js logic but for stream URLs
-      // Try mpv first, then vlc, then shell.open
       const platform = process.platform;
 
       const resolveBin = (bin) => {
@@ -504,7 +347,6 @@ function register() {
             ? ["/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "mpv"]
             : ["/usr/bin/mpv", "/usr/local/bin/mpv", "/snap/bin/mpv", "mpv"];
 
-      // Build header args for mpv/vlc
       const mpvHeaderArgs = [];
       const vlcHeaderArgs = [];
 
@@ -518,7 +360,6 @@ function register() {
             mpvHeaderArgs.push(`--referrer=${v}`);
             vlcHeaderArgs.push(`--http-referrer=${v}`);
           } else {
-            // Custom headers via --http-header-fields for mpv
             mpvHeaderArgs.push(`--http-header-fields=${k}: ${v}`);
           }
         }
@@ -526,7 +367,6 @@ function register() {
 
       const subArgs = subtitle ? [`--sub-file=${subtitle}`] : [];
 
-      // Try based on preferred playerId
       if (playerId === "mpv" || !playerId) {
         for (const mpv of mpvPaths) {
           if (tryLaunch(mpv, [...mpvHeaderArgs, ...subArgs, url])) {
@@ -543,7 +383,6 @@ function register() {
         }
       }
 
-      // Fallback to shell open
       const { shell } = require("electron");
       await shell.openExternal(url);
       return { ok: true, player: "system", method: "shell.openExternal" };
@@ -552,67 +391,11 @@ function register() {
     }
   });
 
-  // Launch Android player (Termux simulation)
-  ipcMain.handle("launch-android-player", async (_, { url, playerId, packageName, headers, subtitle, title, mimeType }) => {
-    try {
-      const openers = probeAndroidOpeners();
-      if (openers.length === 0) {
-        return { ok: false, error: "No Android opener found (termux-am, termux-open not installed)" };
-      }
-
-      // Prefer termux-am for header/subtitle support, fallback to termux-open
-      const amOpener = openers.find(o => o.type === "termux-am");
-      if (amOpener) {
-        try {
-          const result = await launchViaTermuxAm(url, {
-            subtitle,
-            headers,
-            packageName,
-            title,
-            mimeType,
-            openerPath: amOpener.path,
-          });
-          return { ok: true, opener: "termux-am", ...result };
-        } catch (e) {
-          console.warn("[ExternalPlayer] termux-am failed, trying termux-open:", e.message);
-        }
-      }
-
-      const openOpener = openers.find(o => o.type === "termux-open");
-      if (openOpener) {
-        const result = await launchViaTermuxOpen(url, {
-          mimeType,
-          openerPath: openOpener.path,
-        });
-        return { ok: true, opener: "termux-open", ...result };
-      }
-
-      // Try termux-open-url
-      const openUrlOpener = openers.find(o => o.type === "termux-open-url");
-      if (openUrlOpener) {
-        return new Promise((resolve, reject) => {
-          const proc = spawn(openUrlOpener.path, [url], { stdio: "ignore" });
-          proc.on("close", (code) => {
-            if (code === 0) resolve({ ok: true, opener: "termux-open-url" });
-            else reject(new Error(`termux-open-url exited ${code}`));
-          });
-          proc.on("error", reject);
-        });
-      }
-
-      return { ok: false, error: "No suitable Android opener succeeded" };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
-
-  // Get stream headers for URL (from session cookies)
+  // Get stream headers from session cookies (desktop only)
   ipcMain.handle("get-stream-headers", async (_, { url, sourceId }) => {
     try {
       const { session } = require("electron");
       const playerSession = session.fromPartition("persist:player");
-
-      // Get cookies for URL
       let cookieHeader = "";
       try {
         const cookies = await playerSession.cookies.get({ url });
@@ -633,6 +416,12 @@ function register() {
       return { ok: false, error: e.message };
     }
   });
+
+  // NOTE: Android-specific IPC handlers REMOVED
+  // Previously had probe-android-openers and launch-android-player using Termux shell commands
+  // Those are INVALID for pure Android runtime per task requirements
+  // Android now uses native Java plugin (ExternalPlayerPlugin.java) via Capacitor
+  // No Electron, no Node, no Termux in Android path
 }
 
-module.exports = { register, MainProxyServer, detectDesktopPlayers, probeAndroidOpeners };
+module.exports = { register, MainProxyServer, detectDesktopPlayers };

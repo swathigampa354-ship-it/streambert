@@ -194,16 +194,18 @@ contextBridge.exposeInMainWorld("electron", {
   discordRpcUpdateActivity: (activity) =>
     ipcRenderer.invoke("discord-rpc-update-activity", activity),
 
-  // ── External Player (Android-compatible) ──────────────────────────────────
+  // ── External Player (Desktop only, Android uses native Java plugin) ───────
+  // Desktop: mpv/vlc detection, proxy, launch
+  // Android: uses Capacitor ExternalPlayer plugin (no Electron IPC)
   getAvailablePlayers: () => ipcRenderer.invoke("get-available-players"),
-  probeAndroidOpeners: () => ipcRenderer.invoke("probe-android-openers"),
   startProxyServer: (args) => ipcRenderer.invoke("start-proxy-server", args),
   stopProxyServer: () => ipcRenderer.invoke("stop-proxy-server"),
   launchExternalPlayer: (args) =>
     ipcRenderer.invoke("launch-external-player", args),
-  launchAndroidPlayer: (args) =>
-    ipcRenderer.invoke("launch-android-player", args),
   getStreamHeaders: (args) => ipcRenderer.invoke("get-stream-headers", args),
+  // NOTE: probeAndroidOpeners and launchAndroidPlayer REMOVED — they used Termux shell commands
+  // which are INVALID for pure Android runtime per task requirements
+  // Android now uses native Java plugin ExternalPlayerPlugin.java via Capacitor
 });
 
 if (process.platform === "darwin") {

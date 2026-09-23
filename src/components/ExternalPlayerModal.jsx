@@ -163,7 +163,7 @@ export default function ExternalPlayerModal({
               <div style={{ fontWeight: 600, marginBottom: 8 }}>No compatible player found</div>
               <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 16 }}>
                 {isAndroid
-                  ? "Install VLC, MPV, MX Player, or Just Player from Play Store, and ensure Termux tools are installed (pkg install termux-tools termux-am)."
+                  ? "Install VLC, MPV, MX Player, or Just Player from Play Store. Uses Android native Intent API (no Termux needed)."
                   : "Install MPV or VLC on your system. On Android, this will show system chooser for installed video players."}
               </div>
             </div>
@@ -213,8 +213,8 @@ export default function ExternalPlayerModal({
 
               <div style={{ fontSize: 11, opacity: 0.5, textAlign: "center", marginTop: 4 }}>
                 {isAndroid
-                  ? "System chooser will show all installed video players (VLC, MPV, MX Player, etc.)"
-                  : "Desktop: launches via MPV/VLC binary or system default. Android: uses termux-open / Intent."}
+                  ? "System chooser shows all installed video players (VLC, MPV, MX Player, etc.) via Android native Intent API"
+                  : "Desktop: launches via MPV/VLC binary or system default. Android: uses native Intent / Capacitor plugin."}
               </div>
             </>
           )}
