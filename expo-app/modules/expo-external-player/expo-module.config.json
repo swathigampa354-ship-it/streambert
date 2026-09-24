@@ -2,10 +2,7 @@
   "platforms": ["android"],
   "android": {
     "modules": [
-      {
-        "packageName": "expo.modules.externalplayer",
-        "className": "ExternalPlayerModule"
-      }
+      "expo.modules.externalplayer.ExternalPlayerModule"
     ]
   }
 }
