@@ -23,8 +23,8 @@ run "JS unit (real modules)"        node tests/test_js_unit.mjs
 run "Bridge contract"               node tests/test_bridge_contract.mjs
 run "Java proxy E2E (javac+JVM)"    bash tests/test_proxy_java.sh
 run "API live (network)"            node tests/test_api_live.mjs
-run "Expo config parity"            node tests/test_expo_config.mjs
 run "Frontend dist"                 bash tests/test_frontend_dist.sh ${FAST:+$FAST}
+run "Expo config parity"            node tests/test_expo_config.mjs
 run "UI + TV mode (static/module/jsdom)" node tests/test_ui_tv.mjs
 if ! node -e "require.resolve('jsdom')" 2>/dev/null; then
   echo "  [SKIP] frontendRender: jsdom not installed (run: npm install)"

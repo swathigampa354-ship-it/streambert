@@ -6,11 +6,11 @@ group = 'expo.modules.externalplayer'
 version = '1.0.0'
 
 buildscript {
-  def expoModulesCorePlugin = new File([Node, "--print", "require.resolve('expo-modules-core/android/build.gradle')"].execute(null, rootDir).text.trim())
+  def expoModulesCorePlugin = new File(["node", "--print", "require.resolve('expo-modules-core/android/build.gradle')"].execute(null, rootDir).text.trim())
   apply from: expoModulesCorePlugin
   apply from: expoModulesCorePlugin.getParentFile().getParentFile().getParentFile().getAbsolutePath() + "/expo-module-gradle-plugin/build.gradle"
-  if (new File([Node, "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()).exists()) {
-    apply from: [Node, "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()
+  if (new File(["node", "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()).exists()) {
+    apply from: ["node", "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()
   }
 }
 

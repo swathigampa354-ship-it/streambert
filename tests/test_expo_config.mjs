@@ -51,8 +51,12 @@ for (const call of tsCalls) {
 
 // --- expo-module.config.json <-> Kotlin class ---
 const modCfg = JSON.parse(readEA('modules/expo-external-player/expo-module.config.json'));
-s.eq(modCfg.android.modules[0].packageName, 'expo.modules.externalplayer', 'config package == Kotlin package');
-s.eq(modCfg.android.modules[0].className, 'ExternalPlayerModule', 'config class == Kotlin class');
+// expo-module.config.json MUST use the string FQCN form ("pkg.Class"), not
+// {packageName, className} objects — object entries make expo-modules-autolinking
+// emit ``[object Object].class`` into ExpoModulesPackageList.java (EAS javac fail).
+s.ok(modCfg.android.modules.every(m => typeof m === 'string'), 'config modules are FQCN strings, not objects');
+s.ok(modCfg.android.modules.includes('expo.modules.externalplayer.ExternalPlayerModule'),
+  'config contains expo.modules.externalplayer.ExternalPlayerModule FQCN');
 s.includes(kt, 'package expo.modules.externalplayer', 'Kotlin package declaration matches');
 
 // --- manifest queries <-> Kotlin known packages parity ---
@@ -99,6 +103,15 @@ s.ok(fs.existsSync(distIndex), 'expo-app/assets/dist/index.html exists (run scri
 const rootDist = fs.readFileSync(path.join(ROOT, 'dist/index.html'), 'utf8');
 const eaDist = fs.existsSync(distIndex) ? fs.readFileSync(distIndex, 'utf8') : '';
 s.ok(rootDist === eaDist, 'expo-app/assets/dist is in sync with root dist build');
+
+// Regression trap for EAS gradle failure (build c0eace4f, 2026-09-24):
+// bare `Node` identifier (resolves to groovy class) instead of "node"
+// string in module build.gradle -> "Cannot run program \"class groovy.util.Node\""
+{
+  const mg = fs.readFileSync(path.join(EA, 'modules/expo-external-player/android/build.gradle'), 'utf8');
+  s.ok(!/\[Node,\s*"--print"/.test(mg), 'module build.gradle uses "node" string, not bare Node identifier');
+  s.ok(mg.includes('["node", "--print"'), 'module build.gradle has correct ["node", ...] exec form');
+}
 
 const { status, line, results } = s.summary();
 console.log(line);
