@@ -23,16 +23,22 @@ function withExternalPlayerQueries(config) {
       { action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }], data: [{ $: { 'android:mimeType': 'application/vnd.apple.mpegurl' } }] },
     ];
 
+    // Must stay in sync with knownPlayerPackages in
+    // modules/expo-external-player/android/.../ExternalPlayerModule.kt
+    // (PackageManager.getPackageInfo is blocked by package-visibility rules
+    // on Android 11+ unless the package is declared in <queries>)
     const knownPackages = [
       'org.videolan.vlc',
       'org.videolan.vlc.debug',
       'is.xyz.mpv',
       'is.xyz.mpv.debug',
+      'com.mpv',
       'com.mxtech.videoplayer.ad',
       'com.mxtech.videoplayer.pro',
       'com.brouken.player',
-      'dev.anotherwidget.ftp',
       'com.anotherwidget.justplayer',
+      'dev.anotherwidget.ftp',
+      'dev.anishaneja.nextplayer',
       'org.courville.nova',
       'org.xbmc.kodi'
     ];
@@ -68,6 +74,12 @@ function withExternalPlayerPermissions(config) {
       manifest['uses-permission'] = [];
     }
 
+    // Scoped storage: legacy storage permissions must NEVER ship unbounded.
+    // WRITE/READ applies to API<=28 / <=32 only (Kotlin uses MediaStore above).
+    const SDK_CAPS = {
+      'android.permission.WRITE_EXTERNAL_STORAGE': '28',
+      'android.permission.READ_EXTERNAL_STORAGE': '32',
+    };
     const permissions = [
       'android.permission.INTERNET',
       'android.permission.WRITE_EXTERNAL_STORAGE',
@@ -76,16 +88,15 @@ function withExternalPlayerPermissions(config) {
     ];
 
     for (const perm of permissions) {
-      const exists = manifest['uses-permission'].some(p => p.$['android:name'] === perm);
-      if (!exists) {
-        // For WRITE/READ_EXTERNAL_STORAGE, add maxSdkVersion
-        if (perm === 'android.permission.WRITE_EXTERNAL_STORAGE') {
-          manifest['uses-permission'].push({ $: { 'android:name': perm, 'android:maxSdkVersion': '28' } });
-        } else if (perm === 'android.permission.READ_EXTERNAL_STORAGE') {
-          manifest['uses-permission'].push({ $: { 'android:name': perm, 'android:maxSdkVersion': '32' } });
-        } else {
-          manifest['uses-permission'].push({ $: { 'android:name': perm } });
-        }
+      const entry = manifest['uses-permission'].find(p => p.$['android:name'] === perm);
+      const cap = SDK_CAPS[perm];
+      if (entry) {
+        // exists (e.g. from template or another library): enforce the cap
+        if (cap) entry.$['android:maxSdkVersion'] = cap;
+      } else {
+        manifest['uses-permission'].push(cap
+          ? { $: { 'android:name': perm, 'android:maxSdkVersion': cap } }
+          : { $: { 'android:name': perm } });
       }
     }
 

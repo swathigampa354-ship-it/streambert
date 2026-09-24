@@ -1,0 +1,9 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": false,
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["app/**/*.ts", "app/**/*.tsx", "modules/expo-external-player/src/**/*.ts"]
+}

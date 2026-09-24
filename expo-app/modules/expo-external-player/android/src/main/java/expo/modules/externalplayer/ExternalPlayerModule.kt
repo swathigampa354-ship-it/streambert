@@ -27,6 +27,7 @@ class ExternalPlayerModule : Module() {
     "com.brouken.player",
     "com.anotherwidget.justplayer",
     "dev.anotherwidget.ftp",
+    "dev.anishaneja.nextplayer",
     "org.courville.nova",
     "org.xbmc.kodi"
   )
@@ -36,24 +37,20 @@ class ExternalPlayerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoExternalPlayer")
 
-    // Get installed players via PackageManager
     AsyncFunction("getInstalledPlayers") {
       val context = appContext.reactContext ?: throw Exception("React context not available")
       val pm = context.packageManager
       val installed = mutableListOf<String>()
 
-      // Check known packages
       for (pkg in knownPlayerPackages) {
         try {
           pm.getPackageInfo(pkg, 0)
           installed.add(pkg)
           Log.d(TAG, "Found known player: $pkg")
         } catch (e: PackageManager.NameNotFoundException) {
-          // Not installed
         }
       }
 
-      // Query all apps that handle video/*
       try {
         val intent = Intent(Intent.ACTION_VIEW).apply { type = "video/*" }
         val activities = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
@@ -77,7 +74,6 @@ class ExternalPlayerModule : Module() {
       return@AsyncFunction mapOf("players" to installed)
     }
 
-    // Launch player via ACTION_VIEW Intent
     AsyncFunction("launchPlayer") { options: Map<String, Any?> ->
       val context = appContext.reactContext ?: throw Exception("React context not available")
       val url = options["url"] as? String ?: throw Exception("No URL provided")
@@ -98,7 +94,6 @@ class ExternalPlayerModule : Module() {
         addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
       }
 
-      // Specific package or chooser
       if (!packageName.isNullOrEmpty() && packageName != "system-default") {
         try {
           context.packageManager.getPackageInfo(packageName, 0)
@@ -109,14 +104,12 @@ class ExternalPlayerModule : Module() {
         }
       }
 
-      // Title
       if (!title.isNullOrEmpty()) {
         intent.putExtra("title", title)
         intent.putExtra(Intent.EXTRA_TITLE, title)
         intent.putExtra("android.intent.extra.TITLE", title)
       }
 
-      // Headers
       headers?.let {
         it["User-Agent"]?.let { ua ->
           intent.putExtra("User-Agent", ua)
@@ -128,7 +121,6 @@ class ExternalPlayerModule : Module() {
         }
       }
 
-      // Subtitles - 9 keys for compatibility
       if (!subtitle.isNullOrEmpty()) {
         if (subtitle.startsWith("/")) {
           val subFile = File(subtitle)
@@ -144,7 +136,6 @@ class ExternalPlayerModule : Module() {
         intent.putExtra("subs.name", subtitle)
         intent.putExtra("subs.filename", subtitle)
         intent.putExtra("sub.filename", subtitle)
-        // ArrayList versions
         val list = ArrayList<String>().apply { add(subtitle) }
         intent.putStringArrayListExtra("subs", list)
         intent.putStringArrayListExtra("subs.enable", list)
@@ -169,14 +160,12 @@ class ExternalPlayerModule : Module() {
       }
     }
 
-    // Start proxy server
     AsyncFunction("startProxy") { options: Map<String, Any?> ->
       val targetUrl = options["targetUrl"] as? String ?: throw Exception("No targetUrl")
       @Suppress("UNCHECKED_CAST")
       val headers = options["headers"] as? Map<String, String> ?: emptyMap()
       val subtitleUrl = options["subtitleUrl"] as? String
 
-      // Stop existing
       proxyServer?.stop()
 
       val server = AndroidProxyServer(targetUrl, headers, subtitleUrl)
@@ -184,8 +173,6 @@ class ExternalPlayerModule : Module() {
       proxyServer = server
 
       val port = server.getPort()
-      val localUrl = "http://127.0.0.1:$port/https/${targetUrl.removePrefix("https://").removePrefix("http://")}"
-      // Actually construct properly
       val hostPath = targetUrl.replace(Regex("^https?://"), "")
       val scheme = if (targetUrl.startsWith("https://")) "https" else "http"
       val finalLocalUrl = "http://127.0.0.1:$port/$scheme/$hostPath"
@@ -194,27 +181,21 @@ class ExternalPlayerModule : Module() {
       return@AsyncFunction mapOf("localUrl" to finalLocalUrl, "port" to port)
     }
 
-    // Stop proxy
     AsyncFunction("stopProxy") {
       proxyServer?.stop()
       proxyServer = null
       return@AsyncFunction mapOf("stopped" to true)
     }
 
-    // Download subtitle
     AsyncFunction("downloadSubtitle") { options: Map<String, Any?> ->
       val context = appContext.reactContext ?: throw Exception("React context not available")
       val url = options["url"] as? String ?: throw Exception("No URL")
-      val fileName = options["fileName"] as? String ?: "subtitle.srt"
+      val fileName = (options["fileName"] as? String ?: "subtitle.srt").replace(Regex("[^A-Za-z0-9._-]"), "_")
       @Suppress("UNCHECKED_CAST")
       val headers = options["headers"] as? Map<String, String> ?: emptyMap()
 
-      val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "StreambertSubs")
-      if (!dir.exists()) dir.mkdirs()
-
-      val file = File(dir, fileName)
-
       try {
+        // 1) Fetch subtitle bytes
         val urlObj = URL(url)
         val conn = urlObj.openConnection() as HttpURLConnection
         conn.connectTimeout = 15000
@@ -227,26 +208,65 @@ class ExternalPlayerModule : Module() {
         if (conn.responseCode != 200) {
           throw Exception("HTTP ${conn.responseCode}")
         }
+        val bytes = conn.inputStream.use { it.readBytes() }
+        conn.disconnect()
+        if (bytes.isEmpty()) throw Exception("Empty subtitle response")
 
-        conn.inputStream.use { input ->
-          FileOutputStream(file).use { output ->
-            input.copyTo(output)
+        // 2) Persist scoped-storage-safe:
+        //    API 29+  -> MediaStore.Downloads (no storage permission required)
+        //    API <=28 -> direct write (WRITE_EXTERNAL_STORAGE granted at install)
+        val absolutePath = if (android.os.Build.VERSION.SDK_INT >= 29) {
+          val resolver = context.contentResolver
+          val collection = android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+          val relativePath = Environment.DIRECTORY_DOWNLOADS + "/StreambertSubs/"
+
+          // Remove any previous entry with the same display name (idempotent re-download)
+          val projection = arrayOf(android.provider.MediaStore.MediaColumns._ID)
+          val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH}=?"
+          resolver.query(collection, projection, selection, arrayOf(fileName, relativePath), null)?.use { cursor ->
+            while (cursor.moveToFirst()) {
+              val id = cursor.getLong(0)
+              resolver.delete(android.content.ContentUris.withAppendedId(collection, id), null, null)
+            }
           }
+
+          val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, if (fileName.endsWith(".vtt")) "text/vtt" else "application/x-subrip")
+            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+          }
+          val uri = resolver.insert(collection, values) ?: throw Exception("MediaStore insert failed")
+          resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: throw Exception("MediaStore openOutputStream failed")
+
+          // Deterministic public path so external players (VLC/MX/MPV with their
+          // own storage/media permissions or all-files access) can open it.
+          File(Environment.getExternalStorageDirectory(), "Download/StreambertSubs/$fileName").absolutePath
+        } else {
+          val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "StreambertSubs")
+          if (!dir.exists()) dir.mkdirs()
+          val file = File(dir, fileName)
+          FileOutputStream(file).use { it.write(bytes) }
+          file.absolutePath
         }
 
-        Log.i(TAG, "Downloaded subtitle to ${file.absolutePath}")
-        return@AsyncFunction mapOf("filePath" to file.absolutePath, "exists" to file.exists())
+        Log.i(TAG, "Downloaded subtitle to $absolutePath (${bytes.size} bytes)")
+        return@AsyncFunction mapOf("filePath" to absolutePath, "exists" to true)
       } catch (e: Exception) {
         Log.e(TAG, "Subtitle download failed", e)
         throw Exception("Download failed: ${e.message}")
       }
     }
 
-    // Get subtitle dir
     AsyncFunction("getSubtitleDir") {
-      val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "StreambertSubs")
-      if (!dir.exists()) dir.mkdirs()
-      return@AsyncFunction mapOf("path" to dir.absolutePath)
+      return@AsyncFunction mapOf("path" to File(Environment.getExternalStorageDirectory(), "Download/StreambertSubs").absolutePath)
+    }
+
+    AsyncFunction("fileExists") { path: String ->
+      return@AsyncFunction try {
+        File(path).exists()
+      } catch (e: Exception) {
+        false
+      }
     }
   }
 

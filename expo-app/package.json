@@ -6,41 +6,35 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "patch-package"
   },
   "dependencies": {
-    "expo": "~51.0.35",
-    "expo-dev-client": "~4.0.20",
-    "expo-router": "~3.5.23",
-    "expo-file-system": "~17.0.1",
-    "expo-secure-store": "~13.0.2",
-    "expo-sqlite": "~14.0.6",
-    "expo-media-library": "~16.0.5",
-    "expo-notifications": "~0.28.19",
-    "expo-linking": "~6.3.1",
-    "expo-constants": "~16.0.2",
-    "expo-status-bar": "~1.12.1",
-    "expo-build-properties": "~0.12.5",
-    "expo-modules-core": "~1.12.24",
-    "react": "18.2.0",
-    "react-native": "0.74.5",
-    "react-native-webview": "13.8.6",
-    "react-native-safe-area-context": "4.10.5",
-    "react-native-screens": "3.31.1"
+    "expo": "~52.0.0",
+    "expo-asset": "~11.0.5",
+    "expo-build-properties": "~0.13.3",
+    "expo-constants": "~17.0.8",
+    "expo-dev-client": "~5.0.20",
+    "expo-external-player": "file:./modules/expo-external-player",
+    "expo-file-system": "~18.0.12",
+    "expo-linking": "~7.0.5",
+    "expo-media-library": "~17.0.6",
+    "expo-notifications": "~0.29.14",
+    "expo-router": "~4.0.22",
+    "expo-screen-orientation": "~8.0.4",
+    "expo-secure-store": "~14.0.1",
+    "expo-sqlite": "~15.1.4",
+    "expo-status-bar": "~2.0.1",
+    "query-string": "^8.2.0",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0",
+    "react-native-webview": "13.12.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "typescript": "^5.3.3"
-  },
-  "expo": {
-    "autolinking": {
-      "legacy": {
-        "react-native-webview": {
-          "android": {
-            "modules": ["react-native-webview"]
-          }
-        }
-      }
-    }
+    "patch-package": "^8.0.1",
+    "typescript": "~5.3.3"
   }
 }

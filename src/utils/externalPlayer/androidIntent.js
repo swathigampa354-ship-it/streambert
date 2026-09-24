@@ -73,39 +73,14 @@ export function buildHeaderExtrasNative(headers) {
   return extras;
 }
 
-// ── LEGACY Termux commands (kept for reference, NOT used in pure Android runtime) ──
-// These require Termux and shell, which are invalid for normal Android playback per task.
-// They are retained only if user explicitly runs in Termux environment, but default Android uses native Intents.
 
-export function buildTermuxAmCommand(url, options = {}) {
-  console.warn("[AndroidIntent] buildTermuxAmCommand is LEGACY Termux, not for pure Android. Use buildIntentUri or native bridge instead.");
-  const { subtitle, headers = {}, packageName, title, mimeType = "video/*" } = options;
-  const cmd = ["termux-am", "start", "-a", "android.intent.action.VIEW", "-d", url, "-t", mimeType];
-  if (packageName) cmd.push("-n", packageName);
-  if (title) {
-    cmd.push("-e", "title", title);
-    cmd.push("-e", "android.intent.extra.TITLE", title);
-  }
-  for (const { flag, key, value } of buildHeaderExtras(headers)) cmd.push(flag, key, value);
-  if (subtitle) for (const { flag, key, value } of buildSubtitleExtras(subtitle)) cmd.push(flag, key, value);
-  return cmd;
-}
 
-export function buildTermuxOpenCommand(url, options = {}) {
-  console.warn("[AndroidIntent] buildTermuxOpenCommand is LEGACY Termux, not for pure Android.");
-  const { mimeType = "video/*" } = options;
-  return ["termux-open", "--chooser", "--content-type", mimeType, url];
-}
 
-export function buildTermuxOpenUrlCommand(url) {
-  console.warn("[AndroidIntent] buildTermuxOpenUrlCommand is LEGACY Termux.");
-  return ["termux-open-url", url];
-}
 
 // ── REAL Android-native implementations (no Termux, no Electron) ──
 
 /**
- * Build Android Intent URI for use with Capacitor or Web Intent API
+ * Build Android intent:// URI for the Linking fallback (Chrome/WebView, no native module)
  * This is REAL Android mechanism, works in Chrome/WebView without Termux/Electron
  * @param {string} url
  * @param {Object} options
@@ -143,34 +118,6 @@ export function buildIntentUri(url, options = {}) {
 
   intent += `end`;
   return intent;
-}
-
-/**
- * Build Capacitor ExternalPlayer plugin options (real Android Intent via native code)
- * @param {string} url
- * @param {Object} options
- * @returns {Object}
- */
-export function buildCapacitorIntentOptions(url, options = {}) {
-  const { packageName, mimeType = "video/*", title, headers = {}, subtitle } = options;
-
-  const extras = {};
-
-  if (title) {
-    extras["title"] = title;
-    extras["android.intent.extra.TITLE"] = title;
-  }
-
-  Object.assign(extras, buildHeaderExtrasNative(headers));
-  Object.assign(extras, buildSubtitleExtrasNative(subtitle));
-
-  return {
-    url,
-    packageName: packageName || null,
-    mimeType,
-    extras,
-    action: "android.intent.action.VIEW",
-  };
 }
 
 /**
@@ -214,10 +161,6 @@ export function buildWebIntent(url, options = {}) {
 export function detectBestOpener() {
   if (typeof window !== "undefined") {
     // Real Android native
-    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-      const capPlatform = window.Capacitor.getPlatform?.();
-      if (capPlatform === "android") return "capacitor-externalplayer";
-    }
     if (window.StreambertNative) return "streambert-native";
     if (window.AndroidBridge && typeof window.AndroidBridge.getInstalledPlayers === "function") {
       return "android-bridge";

@@ -74,9 +74,9 @@ export const KNOWN_PLAYERS = [
     id: PlayerKind.NEXT_PLAYER,
     label: "Next Player",
     packageNames: [
-      "com.anotherwidget.justplayer", // actually Next Player package? Check: dev.anotherwidget.ftp? Let's use common
-      "dev.anotherwidget.ftp",
-      "com.anotherwidget.justplayer",
+      "dev.anishaneja.nextplayer",     // Next Player (Anisha Neja, Play Store / F-Droid)
+      "dev.anotherwidget.ftp",         // FTP Video Player by anotherwidget
+      "com.anotherwidget.justplayer",  // anotherwidget Just Player variant
     ],
     type: "android",
     supportsHeaders: true,
@@ -162,19 +162,12 @@ export function getSystemPlayers() {
   return KNOWN_PLAYERS.filter(p => p.type === "system");
 }
 
-// Android opener types - REAL Android-native only (no Termux)
-// Termux types kept as legacy but marked deprecated
+// Android opener types for the production Expo/WebView architecture
 export const AndroidOpenerType = {
-  // Real Android-native (no Termux, no Electron)
-  CAPACITOR_EXTERNAL_PLAYER: "capacitor-externalplayer",
+  // Expo native module bridge (expo-external-player -> PackageManager + Intent)
   STREAMBERT_NATIVE: "streambert-native",
+  // intent:// URI fallback via RN Linking (no native module)
   INTENT_URI: "intent-uri",
+  // System chooser fallback
   SYSTEM_CHOOSER: "system-chooser",
-  // Legacy (deprecated, NOT for pure Android runtime)
-  TERMUX_AM: "termux-am-legacy",
-  TERMUX_OPEN: "termux-open-legacy",
-  TERMUX_OPEN_URL: "termux-open-url-legacy",
-  SYSTEM_AM: "system-am-legacy",
-  CAPACITOR_INTENT: "capacitor-intent", // old name, use CAPACITOR_EXTERNAL_PLAYER
-  WEB_INTENT: "web-intent",
 };

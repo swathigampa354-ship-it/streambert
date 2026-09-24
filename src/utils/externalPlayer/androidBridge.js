@@ -5,16 +5,19 @@
 import { KNOWN_PLAYERS } from "./playerRegistry.js";
 
 /**
- * Check if Capacitor ExternalPlayer plugin is available
+ * Whether ANY native Android bridge is available (Expo WebView StreambertNative,
+ * StreambertNative WebView bridge or Intent URI fallback).
  * @returns {boolean}
  */
-function hasCapacitorExternalPlayerPlugin() {
+export function isNativeBridgeAvailable() {
   if (typeof window === "undefined") return false;
-  if (!window.Capacitor) return false;
-  const plugins = window.Capacitor.Plugins || {};
-  return !!plugins.ExternalPlayer;
+  return (
+    hasStreambertNativeBridge() ||
+    hasAndroidBridge()
+  );
 }
 
+/**
 /**
  * Check if custom StreambertNative bridge is available (for APK)
  * @returns {boolean}
@@ -40,26 +43,7 @@ function hasAndroidBridge() {
  * @returns {Promise<string[]>} array of package names
  */
 export async function getInstalledPlayersNative() {
-  // Method 1: Capacitor ExternalPlayer plugin (real Android PackageManager)
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      const result = await ExternalPlayer.getInstalledPlayers();
-      // Expected: { players: ["org.videolan.vlc", "is.xyz.mpv", ...] }
-      if (result && Array.isArray(result.players)) {
-        console.log("[AndroidBridge] Capacitor ExternalPlayer detected:", result.players);
-        return result.players;
-      }
-      // Alternative format: result is array directly
-      if (Array.isArray(result)) {
-        return result;
-      }
-    } catch (e) {
-      console.warn("[AndroidBridge] Capacitor ExternalPlayer.getInstalledPlayers failed:", e);
-    }
-  }
-
-  // Method 2: Custom StreambertNative bridge
+  // Method 1: Custom StreambertNative bridge
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;
@@ -74,7 +58,7 @@ export async function getInstalledPlayersNative() {
     }
   }
 
-  // Method 3: Legacy AndroidBridge (if it has proper method, not Termux)
+  // Method 2: Legacy AndroidBridge (if it has proper method, not Termux)
   if (hasAndroidBridge()) {
     try {
       const result = await window.AndroidBridge.getInstalledPlayers();
@@ -117,31 +101,7 @@ export async function launchPlayerNative(options) {
     return { ok: false, error: "No URL", method: "none" };
   }
 
-  // Method 1: Capacitor ExternalPlayer plugin (real Intent)
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      const result = await ExternalPlayer.launchPlayer({
-        url,
-        packageName: packageName || null,
-        mimeType,
-        title: title || null,
-        headers: headers || {},
-        subtitle: subtitle || null,
-      });
-      console.log("[AndroidBridge] Launched via Capacitor ExternalPlayer:", result);
-      // Plugin should return {ok: true} or throw
-      if (result && result.ok === false) {
-        return { ok: false, error: result.error || "Launch failed", method: "capacitor-externalplayer" };
-      }
-      return { ok: true, method: "capacitor-externalplayer", package: packageName };
-    } catch (e) {
-      console.warn("[AndroidBridge] Capacitor launch failed:", e);
-      // Don't return error yet, try next method
-    }
-  }
-
-  // Method 2: Custom StreambertNative bridge
+  // Method 1: Custom StreambertNative bridge
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;
@@ -168,7 +128,7 @@ export async function launchPlayerNative(options) {
     }
   }
 
-  // Method 3: Legacy AndroidBridge
+  // Method 2: Legacy AndroidBridge
   if (hasAndroidBridge()) {
     try {
       const payload = JSON.stringify({
@@ -249,27 +209,7 @@ export async function launchPlayerNative(options) {
  * @returns {Promise<{proxyUrl: string, port: number}>}
  */
 export async function startProxyNative(targetUrl, headers = {}, subtitleUrl = null) {
-  // Method 1: Capacitor ExternalPlayer plugin has proxy
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      if (typeof ExternalPlayer.startProxy === "function") {
-        const result = await ExternalPlayer.startProxy({
-          targetUrl,
-          headers: headers || {},
-          subtitleUrl: subtitleUrl || null,
-        });
-        console.log("[AndroidBridge] Proxy started via Capacitor:", result);
-        if (result && result.proxyUrl) {
-          return { proxyUrl: result.proxyUrl, port: result.port || 0 };
-        }
-      }
-    } catch (e) {
-      console.warn("[AndroidBridge] Capacitor startProxy failed:", e);
-    }
-  }
-
-  // Method 2: StreambertNative bridge
+  // Method 1: StreambertNative bridge
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;
@@ -277,8 +217,9 @@ export async function startProxyNative(targetUrl, headers = {}, subtitleUrl = nu
         const payload = JSON.stringify({ targetUrl, headers, subtitleUrl });
         const resultStr = await bridge.startProxy(payload);
         const result = typeof resultStr === "string" ? JSON.parse(resultStr) : resultStr;
-        if (result && result.proxyUrl) {
-          return { proxyUrl: result.proxyUrl, port: result.port || 0 };
+        const proxyUrl = result && (result.proxyUrl || result.localUrl); // normalize module's localUrl
+        if (proxyUrl) {
+          return { proxyUrl, port: result.port || 0 };
         }
       }
     } catch (e) {
@@ -286,10 +227,10 @@ export async function startProxyNative(targetUrl, headers = {}, subtitleUrl = nu
     }
   }
 
-  // Method 3: No native proxy available - throw clear error
+  // Method 2: No native proxy available - throw clear error
   // For pure web, we cannot start native HTTP server
   // Caller should handle this and either use direct URL or show error
-  throw new Error("Native proxy not available - requires Capacitor ExternalPlayer plugin or StreambertNative bridge. For testing, use direct URL if headers allow.");
+  throw new Error("Native proxy not available - requires the native Streambert bridge (Expo module). For testing, use direct URL if headers allow.");
 }
 
 /**
@@ -297,19 +238,6 @@ export async function startProxyNative(targetUrl, headers = {}, subtitleUrl = nu
  * @returns {Promise<void>}
  */
 export async function stopProxyNative() {
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      if (typeof ExternalPlayer.stopProxy === "function") {
-        await ExternalPlayer.stopProxy();
-        console.log("[AndroidBridge] Proxy stopped via Capacitor");
-        return;
-      }
-    } catch (e) {
-      console.warn("[AndroidBridge] Capacitor stopProxy failed:", e);
-    }
-  }
-
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;
@@ -331,24 +259,6 @@ export async function stopProxyNative() {
  * @returns {Promise<{localPath: string}|null>}
  */
 export async function downloadSubtitleNative(url, filename, headers = {}) {
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      if (typeof ExternalPlayer.downloadSubtitle === "function") {
-        const result = await ExternalPlayer.downloadSubtitle({
-          url,
-          filename,
-          headers: headers || {},
-        });
-        if (result && result.localPath) {
-          return { localPath: result.localPath };
-        }
-      }
-    } catch (e) {
-      console.warn("[AndroidBridge] Capacitor downloadSubtitle failed:", e);
-    }
-  }
-
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;
@@ -374,17 +284,6 @@ export async function downloadSubtitleNative(url, filename, headers = {}) {
  * @returns {Promise<string>}
  */
 export async function getSubtitleDirNative() {
-  if (hasCapacitorExternalPlayerPlugin()) {
-    try {
-      const { ExternalPlayer } = window.Capacitor.Plugins;
-      if (typeof ExternalPlayer.getSubtitleDir === "function") {
-        const result = await ExternalPlayer.getSubtitleDir();
-        if (result && result.path) return result.path;
-        if (typeof result === "string") return result;
-      }
-    } catch {}
-  }
-
   if (hasStreambertNativeBridge()) {
     try {
       const bridge = window.StreambertNative;

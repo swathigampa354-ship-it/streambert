@@ -6,3 +6,6 @@ dist/
 *secret.txt
 !expo-app/assets/dist/
 !expo-app/assets/dist/**
+
+# local build artifacts
+build/

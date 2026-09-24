@@ -120,6 +120,12 @@ const androidPlatform = {
         return null;
       }
     }
+    // Inside the Expo WebView the injected shim routes this to Expo SecureStore
+    if (typeof window !== 'undefined' && window.electron?.secureGet) {
+      try {
+        return await window.electron.secureGet(key);
+      } catch {}
+    }
     try {
       return localStorage.getItem(key);
     } catch {
@@ -135,6 +141,11 @@ const androidPlatform = {
       } catch {
         return false;
       }
+    }
+    if (typeof window !== 'undefined' && window.electron?.secureSet) {
+      try {
+        return await window.electron.secureSet(key, value);
+      } catch {}
     }
     try {
       localStorage.setItem(key, value);
@@ -157,12 +168,15 @@ const androidPlatform = {
 
   async downloadSubtitlesForFile(args) {
     // Use native bridge for Android
+    // androidBridge.downloadSubtitleNative has POSITIONAL signature (url, filename, headers)
     try {
-      const filePath = await downloadSubtitleNative({
-        url: args.url,
-        fileName: args.fileName || 'subtitle.srt',
-        headers: args.headers,
-      });
+      const result = await downloadSubtitleNative(
+        args.url || args.subtitleUrl,
+        args.fileName || args.filename || 'subtitle.srt',
+        args.headers || {},
+      );
+      const filePath = result && result.localPath ? result.localPath : null;
+      if (!filePath) return null;
       return { filePath, success: true };
     } catch (e) {
       console.warn('[AndroidPlatform] downloadSubtitlesForFile failed:', e);
@@ -233,14 +247,15 @@ const androidPlatform = {
   },
 
   async launchExternalPlayer(args) {
-    // Use our Android pure-native adapter
-    const { launchWithExternalPlayer } = await import('../../utils/externalPlayer/externalPlayerAdapter.js');
-    return launchWithExternalPlayer(args);
+    // Use the Android pure-native adapter (actual exported name is launchInExternalPlayer)
+    const { launchInExternalPlayer } = await import('../../utils/externalPlayer/externalPlayerAdapter.js');
+    return launchInExternalPlayer(args);
   },
 
   async startProxyServer(args) {
     const { targetUrl, headers, subtitleUrl } = args;
-    const result = await startProxyNative({ targetUrl, headers, subtitleUrl });
+    // androidBridge.startProxyNative has POSITIONAL signature (targetUrl, headers, subtitleUrl)
+    const result = await startProxyNative(targetUrl, headers, subtitleUrl);
     return result;
   },
 
@@ -270,17 +285,13 @@ const androidPlatform = {
   },
 
   async showNotification({ title, body, silent }) {
-    // Use Expo Notifications if available
-    try {
-      if (typeof require !== 'undefined') {
-        const Notifications = require('expo-notifications');
-        await Notifications.scheduleNotificationAsync({
-          content: { title, body },
-          trigger: null,
-        });
+    // In the Expo WebView, route through the injected electron shim to native
+    if (typeof window !== 'undefined' && window.electron?.showNotification) {
+      try {
+        await window.electron.showNotification({ title, body, silent });
         return true;
-      }
-    } catch {}
+      } catch {}
+    }
     console.log(`[Notification] ${title}: ${body}`);
     return true;
   },

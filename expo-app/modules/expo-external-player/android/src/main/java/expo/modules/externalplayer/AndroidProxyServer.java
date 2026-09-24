@@ -14,11 +14,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Android local proxy server for protected streams
- * Mirrors MovieBox-TUI proxy.rs logic
- * Expo version - uses Map<String,String> instead of Capacitor JSObject
- */
 public class AndroidProxyServer {
 
     private static final String TAG = "StreambertProxy";
@@ -48,44 +43,30 @@ public class AndroidProxyServer {
     }
 
     public static String extractHost(String url) {
+        if (url == null) return "";
         try {
-            URL u = new URL(url);
-            return u.getHost() + (u.getPort() != -1 ? ":" + u.getPort() : "");
+            String host = url.replaceAll("^https?://", "").split("/")[0];
+            host = host.split(":")[0].split("\\?")[0];
+            return host.toLowerCase();
         } catch (Exception e) {
-            try {
-                String afterScheme = url.replaceFirst("^https?://", "");
-                String host = afterScheme.split("/")[0];
-                return host;
-            } catch (Exception e2) {
-                return null;
-            }
+            return "";
         }
-    }
-
-    public static String extractTargetUrl(String path) {
-        if (path == null) return null;
-        if (path.startsWith("/https/")) return "https://" + path.substring(7);
-        if (path.startsWith("/http/")) return "http://" + path.substring(6);
-        if (path.startsWith("/")) {
-            String trimmed = path.substring(1);
-            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-        }
-        return null;
     }
 
     public void start() throws IOException {
-        serverSocket = new ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"));
+        serverSocket = new ServerSocket(0);
         port = serverSocket.getLocalPort();
         running = true;
         executor = Executors.newCachedThreadPool();
+        lastActivity = System.currentTimeMillis();
 
         watchdogThread = new Thread(() -> {
             while (running) {
                 try {
-                    Thread.sleep(15000);
-                    long idleMs = System.currentTimeMillis() - lastActivity;
-                    if (activeConnections.get() == 0 && idleMs > WATCHDOG_IDLE_SECS * 1000L) {
-                        Log.i(TAG, "Idle timeout, stopping proxy");
+                    Thread.sleep(10000);
+                    long idle = (System.currentTimeMillis() - lastActivity) / 1000;
+                    if (idle > WATCHDOG_IDLE_SECS && activeConnections.get() == 0) {
+                        Log.i(TAG, "Watchdog stopping idle proxy after " + idle + "s");
                         stop();
                         break;
                     }
@@ -94,291 +75,300 @@ public class AndroidProxyServer {
                 }
             }
         });
-        watchdogThread.setDaemon(true);
         watchdogThread.start();
 
-        Thread acceptThread = new Thread(() -> {
+        executor.submit(() -> {
             while (running) {
                 try {
-                    Socket socket = serverSocket.accept();
+                    Socket client = serverSocket.accept();
                     activeConnections.incrementAndGet();
                     lastActivity = System.currentTimeMillis();
-                    executor.submit(() -> {
-                        try {
-                            handleConnection(socket);
-                        } catch (Exception e) {
-                            Log.e(TAG, "handleConnection error", e);
-                        } finally {
-                            activeConnections.decrementAndGet();
-                            lastActivity = System.currentTimeMillis();
-                            try {
-                                socket.close();
-                            } catch (IOException ignored) {}
-                        }
-                    });
+                    executor.submit(() -> handleClient(client));
                 } catch (IOException e) {
-                    if (running) {
-                        Log.w(TAG, "Accept error", e);
-                        try {
-                            Thread.sleep(50);
-                        } catch (InterruptedException ignored) {}
-                    }
+                    if (running) Log.e(TAG, "Accept failed", e);
                 }
             }
         });
-        acceptThread.setDaemon(true);
-        acceptThread.start();
 
-        Log.i(TAG, "Proxy started on 127.0.0.1:" + port + " target=" + targetUrl);
+        Log.i(TAG, "Proxy started on port " + port + " for " + targetUrl);
     }
 
-    private void handleConnection(Socket socket) throws IOException {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        java.io.OutputStream out = socket.getOutputStream();
-
-        String requestLine = reader.readLine();
-        if (requestLine == null || requestLine.isEmpty()) return;
-        if (requestLine.length() > MAX_LINE_BYTES) {
-            sendError(out, 431, "Request Header Fields Too Large");
-            return;
-        }
-
-        String[] parts = requestLine.split(" ");
-        if (parts.length < 2) {
-            sendError(out, 400, "Bad Request");
-            return;
-        }
-
-        String method = parts[0];
-        String pathAndQuery = parts[1];
-
-        String rangeHeader = null;
-        int headerCount = 0;
-        String line;
-        while ((line = reader.readLine()) != null && !line.isEmpty()) {
-            if (line.length() > MAX_LINE_BYTES) break;
-            headerCount++;
-            if (headerCount > MAX_HEADERS) break;
-            String lower = line.toLowerCase();
-            if (lower.startsWith("range:")) {
-                rangeHeader = line.substring(6).trim();
-            }
-        }
-
-        String targetUrl = extractTargetUrl(pathAndQuery);
-        if (targetUrl == null) {
-            sendError(out, 400, "Bad Request - Invalid proxy path");
-            return;
-        }
-
-        String extractedHost = extractHost(targetUrl);
-        String subtitleHost = subtitleUrl != null ? extractHost(subtitleUrl) : null;
-        boolean isAllowed = extractedHost != null && extractedHost.equals(targetHost) ||
-                            (subtitleHost != null && extractedHost != null && extractedHost.equals(subtitleHost));
-
-        if (!isAllowed) {
-            Log.w(TAG, "Forbidden host: " + extractedHost + " not in allowed " + targetHost);
-            sendError(out, 403, "Forbidden");
-            return;
-        }
-
+    public void stop() {
+        running = false;
         try {
-            URL url = new URL(targetUrl);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(30000);
-            conn.setRequestMethod(method.equals("HEAD") ? "HEAD" : "GET");
-            conn.setInstanceFollowRedirects(true);
-
-            if (extractedHost != null && extractedHost.equals(targetHost)) {
-                for (Map.Entry<String, String> entry : headers.entrySet()) {
-                    try {
-                        if (entry.getValue() != null) {
-                            conn.setRequestProperty(entry.getKey(), entry.getValue());
-                        }
-                    } catch (Exception ignored) {}
-                }
-            } else {
-                if (headers.containsKey("User-Agent")) {
-                    try {
-                        conn.setRequestProperty("User-Agent", headers.get("User-Agent"));
-                    } catch (Exception ignored) {}
-                }
-            }
-
-            if (rangeHeader != null) {
-                conn.setRequestProperty("Range", rangeHeader);
-            }
-
-            conn.connect();
-
-            int responseCode = conn.getResponseCode();
-            String responseMessage = conn.getResponseMessage();
-            String contentType = conn.getContentType();
-
-            boolean isM3u8 = targetUrl.contains(".m3u8") ||
-                             (contentType != null && (contentType.contains("mpegurl") || contentType.contains("x-mpegURL")));
-
-            if (isM3u8) {
-                InputStream in = conn.getInputStream();
-                StringBuilder sb = new StringBuilder();
-                BufferedReader br = new BufferedReader(new InputStreamReader(in));
-                String l;
-                while ((l = br.readLine()) != null) {
-                    sb.append(l).append("\n");
-                }
-                br.close();
-
-                String playlist = sb.toString();
-                String rewritten = rewriteHlsPlaylist(playlist, targetUrl);
-
-                String response = "HTTP/1.1 " + responseCode + " " + responseMessage + "\r\n" +
-                        "Content-Type: application/vnd.apple.mpegurl\r\n" +
-                        "Content-Length: " + rewritten.getBytes().length + "\r\n" +
-                        "Connection: close\r\n" +
-                        "Access-Control-Allow-Origin: *\r\n" +
-                        "\r\n" + rewritten;
-
-                out.write(response.getBytes());
-                out.flush();
-
-                Log.d(TAG, "Rewrote HLS playlist for " + targetUrl + " length=" + rewritten.length());
-
-            } else {
-                StringBuilder headerBuilder = new StringBuilder();
-                headerBuilder.append("HTTP/1.1 ").append(responseCode).append(" ").append(responseMessage).append("\r\n");
-
-                String contentLength = conn.getHeaderField("Content-Length");
-                if (contentLength != null) {
-                    headerBuilder.append("Content-Length: ").append(contentLength).append("\r\n");
-                }
-                if (contentType != null) {
-                    headerBuilder.append("Content-Type: ").append(contentType).append("\r\n");
-                }
-                String acceptRanges = conn.getHeaderField("Accept-Ranges");
-                if (acceptRanges != null) {
-                    headerBuilder.append("Accept-Ranges: ").append(acceptRanges).append("\r\n");
-                }
-                String contentRange = conn.getHeaderField("Content-Range");
-                if (contentRange != null) {
-                    headerBuilder.append("Content-Range: ").append(contentRange).append("\r\n");
-                }
-
-                headerBuilder.append("Connection: close\r\n");
-                headerBuilder.append("Access-Control-Allow-Origin: *\r\n");
-                headerBuilder.append("\r\n");
-
-                out.write(headerBuilder.toString().getBytes());
-                out.flush();
-
-                InputStream in = conn.getInputStream();
-                byte[] buffer = new byte[8192];
-                int len;
-                while ((len = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, len);
-                }
-                out.flush();
-                in.close();
-
-                Log.d(TAG, "Streamed segment: " + targetUrl);
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "Upstream error for " + targetUrl, e);
-            String body = "Gateway Error: " + e.getMessage();
-            String response = "HTTP/1.1 502 Bad Gateway\r\n" +
-                    "Content-Length: " + body.length() + "\r\n" +
-                    "Connection: close\r\n\r\n" + body;
-            out.write(response.getBytes());
-            out.flush();
-        }
-    }
-
-    private String rewriteHlsPlaylist(String playlist, String baseUrl) {
-        try {
-            URL baseUrlObj = new URL(baseUrl);
-            String basePath = baseUrl.substring(0, baseUrl.lastIndexOf("/") + 1);
-
-            StringBuilder sb = new StringBuilder();
-            String[] lines = playlist.split("\n");
-
-            for (String line : lines) {
-                String trimmed = line.trim();
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    if (trimmed.contains("URI=\"")) {
-                        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("URI=\"([^\"]+)\"");
-                        java.util.regex.Matcher matcher = pattern.matcher(trimmed);
-                        StringBuffer buf = new StringBuffer();
-                        while (matcher.find()) {
-                            String uri = matcher.group(1);
-                            String resolved = resolveUrl(uri, basePath, baseUrlObj);
-                            String proxied = urlToProxyPath(resolved);
-                            matcher.appendReplacement(buf, "URI=\"" + java.util.regex.Matcher.quoteReplacement(proxied) + "\"");
-                        }
-                        matcher.appendTail(buf);
-                        sb.append(buf.toString()).append("\n");
-                    } else {
-                        sb.append(line).append("\n");
-                    }
-                } else {
-                    String resolved;
-                    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                        resolved = trimmed;
-                    } else {
-                        resolved = resolveUrl(trimmed, basePath, baseUrlObj);
-                    }
-                    sb.append(urlToProxyPath(resolved)).append("\n");
-                }
-            }
-
-            return sb.toString();
-
-        } catch (Exception e) {
-            Log.e(TAG, "Playlist rewrite failed", e);
-            return playlist;
-        }
-    }
-
-    private String resolveUrl(String relative, String basePath, URL baseUrlObj) {
-        if (relative.startsWith("http://") || relative.startsWith("https://")) return relative;
-        if (relative.startsWith("/")) return baseUrlObj.getProtocol() + "://" + baseUrlObj.getHost() + (baseUrlObj.getPort() != -1 ? ":" + baseUrlObj.getPort() : "") + relative;
-        return basePath + relative;
-    }
-
-    private String urlToProxyPath(String url) {
-        if (url.startsWith("https://")) return "http://127.0.0.1:" + port + "/https/" + url.substring(8);
-        if (url.startsWith("http://")) return "http://127.0.0.1:" + port + "/http/" + url.substring(7);
-        return url;
-    }
-
-    private void sendError(java.io.OutputStream out, int code, String message) throws IOException {
-        String body = message;
-        String response = "HTTP/1.1 " + code + " " + message + "\r\n" +
-                "Content-Length: " + body.length() + "\r\n" +
-                "Connection: close\r\n\r\n" + body;
-        out.write(response.getBytes());
-        out.flush();
+            if (serverSocket != null) serverSocket.close();
+        } catch (IOException e) {}
+        if (executor != null) executor.shutdownNow();
+        if (watchdogThread != null) watchdogThread.interrupt();
+        Log.i(TAG, "Proxy stopped");
     }
 
     public int getPort() {
         return port;
     }
 
-    public void stop() {
-        running = false;
+    private void handleClient(Socket client) {
         try {
-            if (serverSocket != null) {
-                serverSocket.close();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
+            String requestLine = reader.readLine();
+            if (requestLine == null) {
+                client.close();
+                return;
             }
-        } catch (IOException e) {
-            Log.w(TAG, "Error closing server socket", e);
+
+            if (requestLine.length() > MAX_LINE_BYTES) {
+                sendError(client, 414, "Request-URI Too Long");
+                return;
+            }
+
+            String[] parts = requestLine.split(" ");
+            if (parts.length < 2) {
+                sendError(client, 400, "Bad Request");
+                return;
+            }
+
+            String method = parts[0];
+            String path = parts[1];
+
+            Map<String, String> reqHeaders = new java.util.HashMap<>();
+            String line;
+            int headerCount = 0;
+            while ((line = reader.readLine()) != null && !line.isEmpty()) {
+                if (line.length() > MAX_LINE_BYTES || headerCount++ > MAX_HEADERS) {
+                    sendError(client, 431, "Request Header Fields Too Large");
+                    return;
+                }
+                int idx = line.indexOf(":");
+                if (idx > 0) {
+                    String key = line.substring(0, idx).trim();
+                    String value = line.substring(idx + 1).trim();
+                    reqHeaders.put(key, value);
+                }
+            }
+
+            if (!path.startsWith("/http/") && !path.startsWith("/https/")) {
+                sendError(client, 400, "Invalid proxy path, must start with /http/ or /https/");
+                return;
+            }
+
+            // "/https/cdn.example.com/a/b?x=1" -> "https://cdn.example.com/a/b?x=1"
+            // (previous substring(1) produced "https/cdn.example.com/..." - broken URL)
+            int schemeEnd = path.indexOf('/', 1);
+            if (schemeEnd < 0 || schemeEnd + 1 >= path.length()) {
+                sendError(client, 400, "Invalid proxy path");
+                return;
+            }
+            String scheme = path.substring(1, schemeEnd);
+            String actualUrl = scheme + "://" + path.substring(schemeEnd + 1);
+            String host = extractHost(actualUrl);
+            String targetHostLower = targetHost.toLowerCase();
+            String subtitleHost = subtitleUrl != null ? extractHost(subtitleUrl).toLowerCase() : "";
+
+            boolean isTarget = host.equals(targetHostLower) || host.endsWith("." + targetHostLower);
+            boolean isSubtitle = !subtitleHost.isEmpty() && (host.equals(subtitleHost) || host.endsWith("." + subtitleHost));
+
+            if (!isTarget && !isSubtitle) {
+                Log.w(TAG, "Host validation failed: " + host + " not in " + targetHost + " or " + subtitleUrl);
+                sendError(client, 403, "Forbidden: host not allowed");
+                return;
+            }
+
+            proxyRequest(client, method, actualUrl, reqHeaders, isSubtitle);
+
+        } catch (Exception e) {
+            Log.e(TAG, "handleClient failed", e);
+            try { client.close(); } catch (IOException ex) {}
+        } finally {
+            activeConnections.decrementAndGet();
+            lastActivity = System.currentTimeMillis();
         }
-        if (executor != null) {
-            executor.shutdownNow();
+    }
+
+    private void proxyRequest(Socket client, String method, String urlStr, Map<String, String> reqHeaders, boolean isSubtitle) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod(method);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(30000);
+            conn.setInstanceFollowRedirects(false);
+
+            if (isSubtitle) {
+                String ua = headers.get("User-Agent");
+                if (ua != null) conn.setRequestProperty("User-Agent", ua);
+            } else {
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    conn.setRequestProperty(entry.getKey(), entry.getValue());
+                }
+            }
+
+            String range = reqHeaders.get("Range");
+            if (range != null) conn.setRequestProperty("Range", range);
+
+            int responseCode = conn.getResponseCode();
+            String responseMessage = conn.getResponseMessage();
+
+            // Decide whether we will TRANSFORM the body (playlist rewrite).
+            // Only then must upstream Content-Length / Content-Encoding be dropped:
+            // forwarding them with a rewritten body corrupts playback (hangs/truncation).
+            InputStream rawIn = responseCode >= 400 ? conn.getErrorStream() : conn.getInputStream();
+            String contentType = conn.getContentType();
+            String contentEncoding = conn.getContentEncoding();
+            boolean isPlaylist = rawIn != null && contentType != null &&
+                    (contentType.contains("mpegurl") || contentType.contains("x-mpegURL") ||
+                     contentType.contains("application/octet-stream") && urlStr.contains(".m3u8") ||
+                     urlStr.contains(".m3u8"));
+            boolean gzipped = "gzip".equalsIgnoreCase(contentEncoding);
+            boolean transform = isPlaylist; // playlists are small; always safe to buffer+rewrite
+
+            java.io.OutputStream out = client.getOutputStream();
+            String statusLine = "HTTP/1.1 " + responseCode + " " + responseMessage + "\r\n";
+            out.write(statusLine.getBytes());
+
+            for (Map.Entry<String, java.util.List<String>> entry : conn.getHeaderFields().entrySet()) {
+                String key = entry.getKey();
+                if (key == null) continue;
+                // Hop-by-hop: HttpURLConnection already de-chunked the body for us.
+                if (key.equalsIgnoreCase("Transfer-Encoding")) continue;
+                // Body length/encoding only valid when we forward bytes untouched.
+                if (transform && key.equalsIgnoreCase("Content-Length")) continue;
+                if (transform && key.equalsIgnoreCase("Content-Encoding")) continue;
+                for (String value : entry.getValue()) {
+                    if (key.equalsIgnoreCase("Location")) {
+                        value = rewriteUrlIfNeeded(value, urlStr);
+                    }
+                    String headerLine = key + ": " + value + "\r\n";
+                    out.write(headerLine.getBytes());
+                }
+            }
+            if (transform) {
+                // No Content-Length -> clients read until close; we close after the body.
+                out.write("Connection: close\r\n".getBytes());
+            }
+            out.write("\r\n".getBytes());
+
+            if (rawIn != null) {
+                InputStream in = gzipped && transform ? new java.util.zip.GZIPInputStream(rawIn) : rawIn;
+                if (transform) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(in));
+                    StringBuilder sb = new StringBuilder();
+                    String l;
+                    while ((l = br.readLine()) != null) {
+                        String trimmed = l.trim();
+                        if (trimmed.isEmpty()) {
+                            sb.append(l).append("\n");
+                        } else if (!trimmed.startsWith("#")) {
+                            // Segment / variant playlist URL line
+                            sb.append(rewriteUrlIfNeeded(trimmed, urlStr)).append("\n");
+                        } else if (trimmed.contains("URI=\"")) {
+                            // EXT-X-KEY, EXT-X-MEDIA (alt audio/subs), EXT-X-MAP,
+                            // EXT-X-I-FRAME-STREAM-INF, EXT-X-SESSION-KEY, ...
+                            sb.append(rewriteAllUriAttributes(l, urlStr)).append("\n");
+                        } else {
+                            sb.append(l).append("\n");
+                        }
+                    }
+                    out.write(sb.toString().getBytes());
+                } else {
+                    // Byte-stream passthrough (segments); never buffered whole-file.
+                    byte[] buffer = new byte[16384];
+                    int len;
+                    while ((len = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, len);
+                    }
+                }
+                in.close();
+            }
+            out.flush();
+            client.close();
+
+        } catch (Exception e) {
+            Log.e(TAG, "proxyRequest failed for " + urlStr, e);
+            try { sendError(client, 502, "Bad Gateway: " + e.getMessage()); } catch (IOException ex) {}
+        } finally {
+            if (conn != null) conn.disconnect();
         }
-        if (watchdogThread != null) {
-            watchdogThread.interrupt();
+    }
+
+    private String rewriteUrlIfNeeded(String url, String baseUrl) {
+        if (url == null || url.isEmpty()) return url;
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            try {
+                URL base = new URL(baseUrl);
+                String baseHost = base.getHost();
+                String urlHost = new URL(url).getHost();
+                if (urlHost.equals(targetHost) || urlHost.endsWith("." + targetHost)) {
+                    String scheme = url.startsWith("https://") ? "https" : "http";
+                    String hostPath = url.replaceAll("^https?://", "");
+                    return "http://127.0.0.1:" + port + "/" + scheme + "/" + hostPath;
+                }
+            } catch (Exception e) {}
+            return url;
         }
-        Log.i(TAG, "Proxy stopped");
+        if (url.startsWith("/")) {
+            try {
+                URL base = new URL(baseUrl);
+                String newUrl = base.getProtocol() + "://" + authorityOf(base) + url;
+                return rewriteUrlIfNeeded(newUrl, baseUrl);
+            } catch (Exception e) {
+                return url;
+            }
+        }
+        try {
+            URL base = new URL(baseUrl);
+            String basePath = base.getPath();
+            int lastSlash = basePath.lastIndexOf("/");
+            String dir = lastSlash >= 0 ? basePath.substring(0, lastSlash + 1) : "/";
+            String newUrl = base.getProtocol() + "://" + authorityOf(base) + dir + url;
+            return rewriteUrlIfNeeded(newUrl, baseUrl);
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /** host[:port] - URL.getHost() alone DROPS the port (regression: rewritten
+     *  URLs pointed at port 80 and upstreams on non-standard ports broke). */
+    private static String authorityOf(URL u) {
+        return u.getPort() != -1 ? u.getHost() + ":" + u.getPort() : u.getHost();
+    }
+
+    /**
+     * Rewrites every URI="..." attribute inside an #EXT-X-* tag line
+     * (EXT-X-KEY, EXT-X-MEDIA, EXT-X-MAP, EXT-X-I-FRAME-STREAM-INF, EXT-X-SESSION-KEY).
+     * Handles multiple URI attributes per line (defensive).
+     */
+    private String rewriteAllUriAttributes(String line, String baseUrl) {
+        StringBuilder result = new StringBuilder();
+        int cursor = 0;
+        while (true) {
+            int uriStart = line.indexOf("URI=\"", cursor);
+            if (uriStart < 0) {
+                result.append(line.substring(cursor));
+                break;
+            }
+            int start = uriStart + 5;
+            int end = line.indexOf("\"", start);
+            if (end < 0) {
+                result.append(line.substring(cursor));
+                break;
+            }
+            result.append(line, cursor, start);
+            String uri = line.substring(start, end);
+            result.append(rewriteUrlIfNeeded(uri, baseUrl));
+            result.append("\"");
+            cursor = end + 1;
+        }
+        return result.toString();
+    }
+
+    private void sendError(Socket client, int code, String message) throws IOException {
+        String body = message;
+        String response = "HTTP/1.1 " + code + " " + message + "\r\n" +
+                "Content-Type: text/plain\r\n" +
+                "Content-Length: " + body.length() + "\r\n" +
+                "Connection: close\r\n\r\n" + body;
+        client.getOutputStream().write(response.getBytes());
+        client.close();
     }
 }

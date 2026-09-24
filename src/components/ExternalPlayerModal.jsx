@@ -214,7 +214,7 @@ export default function ExternalPlayerModal({
               <div style={{ fontSize: 11, opacity: 0.5, textAlign: "center", marginTop: 4 }}>
                 {isAndroid
                   ? "System chooser shows all installed video players (VLC, MPV, MX Player, etc.) via Android native Intent API"
-                  : "Desktop: launches via MPV/VLC binary or system default. Android: uses native Intent / Capacitor plugin."}
+                  : "Desktop: launches via MPV/VLC binary or system default. Android: uses native Intent via the Expo bridge."}
               </div>
             </>
           )}

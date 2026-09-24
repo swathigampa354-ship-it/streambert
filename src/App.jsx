@@ -28,6 +28,11 @@ import {
 } from "./utils/discordPresence";
 
 import Sidebar from "./components/Sidebar";
+import {
+  isTvModeOn,
+  requestTvMode,
+  syncTvModeOnBoot,
+} from "./utils/tvMode";
 import SearchModal from "./components/SearchModal";
 import SetupScreen from "./components/SetupScreen";
 import CloseConfirmModal from "./components/CloseConfirmModal";
@@ -62,8 +67,40 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [platform, setPlatform] = useState(null);
 
+  // ── TV mode (Android WebView only) ────────────────────────────────────────
+  const [tvMode, setTvMode] = useState(() => isTvModeOn());
+  const [showTvConfirm, setShowTvConfirm] = useState(false);
+
   // Navigation history stack for Ctrl+Z back navigation
   const [navStack, setNavStack] = useState([]);
+
+  // ── TV mode: restore persisted intent after every WebView (re)load ─────────
+  useEffect(() => {
+    let alive = true;
+    syncTvModeOnBoot()
+      .then((on) => { if (alive) setTvMode(on); })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleToggleTvMode = useCallback(() => {
+    if (tvMode) {
+      // EXIT TV MODE: immediate, no confirmation
+      requestTvMode(false)
+        .then(({ tvMode: on }) => setTvMode(on))
+        .catch(() => {});
+    } else {
+      setShowTvConfirm(true);
+    }
+  }, [tvMode]);
+
+  const confirmTvMode = useCallback(() => {
+    setShowTvConfirm(false);
+    requestTvMode(true)
+      .then(({ tvMode: on }) => setTvMode(on))
+      .catch(() => {});
+  }, []);
 
   const [saved, setSaved] = useState(() => storage.get("saved") || {});
   // Separate order array for drag-and-drop reordering
@@ -1006,6 +1043,8 @@ export default function App() {
           canGoBack={navStack.length > 0}
           onBack={navigateBack}
           onShowShortcuts={() => setShowShortcuts(true)}
+          tvMode={tvMode}
+          onToggleTvMode={handleToggleTvMode}
         />
 
         <div className="main">
@@ -1170,6 +1209,42 @@ export default function App() {
             onClose={() => setShowSearch(false)}
             offline={offline}
           />
+        )}
+
+        {showTvConfirm && (
+          <div
+            className="tv-mode-confirm-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="TV Mode"
+            onClick={() => setShowTvConfirm(false)}
+          >
+            <div
+              className="tv-mode-confirm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="tv-mode-confirm-icon">📺</div>
+              <h2 className="tv-mode-confirm-title">TV Mode</h2>
+              <p className="tv-mode-confirm-text">
+                Rotate your phone horizontally for the best experience.
+              </p>
+              <div className="tv-mode-confirm-actions">
+                <button
+                  className="tv-mode-btn tv-mode-btn-primary"
+                  onClick={confirmTvMode}
+                  autoFocus
+                >
+                  Continue
+                </button>
+                <button
+                  className="tv-mode-btn tv-mode-btn-secondary"
+                  onClick={() => setShowTvConfirm(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         )}
         {updateBanner && (
           <div

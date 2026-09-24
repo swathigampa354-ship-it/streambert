@@ -1,0 +1,63 @@
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 251939e..a2f59c8 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -30,6 +30,7 @@ import com.reactnativecommunity.webview.events.TopLoadingErrorEvent;
+ import com.reactnativecommunity.webview.events.TopLoadingFinishEvent;
+ import com.reactnativecommunity.webview.events.TopLoadingStartEvent;
+ import com.reactnativecommunity.webview.events.TopRenderProcessGoneEvent;
++import com.reactnativecommunity.webview.events.TopMessageEvent;
+ import com.reactnativecommunity.webview.events.TopShouldStartLoadWithRequestEvent;
+ import android.webkit.CookieManager;
+ import android.webkit.CookieSyncManager;
+@@ -74,6 +75,50 @@ public class RNCWebViewClient extends WebViewClient {
+         }
+     }
+ 
++    // [streambert-patch] Report media stream subresource URLs (m3u8/mp4/etc)
++    // loaded INSIDE cross-origin iframes to JS. Electron's webRequest saw all
++    // of these; WebView-level JS injection cannot. We emit a synthetic
++    // topMessage event (already registered) instead of adding a codegen spec.
++    private static final String[] STREAM_EXTS = {".m3u8", ".m3u", ".mp4", ".m4v", ".webm", ".mkv", ".mpd"};
++
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        try {
++            if (request != null && request.getUrl() != null) {
++                String url = request.getUrl().toString();
++                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
++                    String lower = url.toLowerCase(java.util.Locale.ROOT);
++                    String noQuery = lower.split("\\?")[0];
++                    boolean isStream = false;
++                    for (String ext : STREAM_EXTS) {
++                        if (noQuery.endsWith(ext)) { isStream = true; break; }
++                    }
++                    if (!isStream && (lower.contains("/hls/") || lower.contains("/dash/"))) {
++                        isStream = true;
++                    }
++                    if (isStream && !(lower.contains(".js") || lower.contains(".css") || lower.contains(".png") || lower.contains(".jpg"))) {
++                        int reactTag = RNCWebViewWrapper.getReactTagFromWebView(view);
++                        WritableMap eventData = Arguments.createMap();
++                        StringBuilder sb = new StringBuilder();
++                        sb.append("{\"type\":\"NATIVE_STREAM_FOUND\",\"url\":\"");
++                        for (int i = 0; i < url.length(); i++) {
++                            char c = url.charAt(i);
++                            if (c == '\\' || c == '"') sb.append('\\');
++                            sb.append(c);
++                        }
++                        sb.append("\"}");
++                        eventData.putString("data", sb.toString());
++                        UIManagerHelper.getEventDispatcherForReactTag((ReactContext) view.getContext(), reactTag)
++                                .dispatchEvent(new TopMessageEvent(reactTag, eventData));
++                    }
++                }
++            }
++        } catch (Throwable ignored) {
++            // interception must NEVER break page loading
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
++
+     @Override
+     public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
+       super.doUpdateVisitedHistory(webView, url, isReload);

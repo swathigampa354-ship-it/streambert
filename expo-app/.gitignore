@@ -1,0 +1,19 @@
+node_modules/
+.expo/
+/dist/
+/android
+/ios
+.expo-shared/
+*.log
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.DS_Store
+.env
+.env.local
+web-build/
+# Keep assets/dist but ignore other dist
+!assets/dist/

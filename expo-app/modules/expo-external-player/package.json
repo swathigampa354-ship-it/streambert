@@ -11,10 +11,19 @@
   "keywords": ["expo", "android", "external-player", "vlc", "mpv"],
   "author": "Streambert",
   "license": "GPL-3.0",
-  "dependencies": {
-    "expo-modules-core": "~1.12.0"
-  },
   "peerDependencies": {
     "expo": "*"
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "modules": [
+          {
+            "packageName": "expo.modules.externalplayer",
+            "className": "ExternalPlayerModule"
+          }
+        ]
+      }
+    }
   }
 }

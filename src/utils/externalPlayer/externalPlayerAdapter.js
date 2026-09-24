@@ -4,11 +4,11 @@
 
 import { DESKTOP_PLAYERS, getPlayerById } from "./playerRegistry.js";
 import { PlayerKind, ErrorCodes } from "./types.js";
-import { buildIntentUri, buildCapacitorIntentOptions, buildNativeIntentOptions } from "./androidIntent.js";
+import { buildIntentUri, buildNativeIntentOptions } from "./androidIntent.js";
 import { analyzeProxyNeed } from "./headerHandler.js";
 import { getBestSubtitle, prepareSubtitleForPlayer } from "./subtitleHandler.js";
 import { validateStreamUrl, enrichWithProxyAnalysis } from "./streamResolver.js";
-import { getPlatform, PLATFORM, isCapacitorAndroid } from "../platform.js";
+import { getPlatform, PLATFORM } from "../platform.js";
 import { detectInstalledPlayers, validatePlayerSelection } from "./androidPlayerDetector.js";
 import { launchPlayerNative } from "./androidBridge.js";
 

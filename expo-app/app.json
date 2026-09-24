@@ -8,8 +8,9 @@
     "scheme": "streambert",
     "userInterfaceStyle": "dark",
     "splash": {
-      "backgroundColor": "#000000",
-      "resizeMode": "contain"
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -22,19 +23,13 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
-      },
-      "permissions": [
-        "android.permission.INTERNET",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_VIDEO"
-      ],
-      "blockedPermissions": []
+      }
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
+      "expo-router",
       [
         "expo-build-properties",
         {
@@ -45,7 +40,14 @@
           }
         }
       ],
-      "./plugins/with-external-player"
-    ]
+      "./plugins/with-external-player",
+      "./plugins/with-dist-assets"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "87b68f14-d33e-4ca6-91db-a0c97f85764e"
+      }
+    },
+    "owner": "bjvgghb777s-team"
   }
 }

@@ -1,0 +1,216 @@
+/* ── Streambert RESPONSIVE / TV-MODE layer ────────────────────────────────
+   ADDITIVE ONLY: no desktop rule is overridden outside these media queries
+   and the opt-in body.tv-mode class. Foundation + breakpoints:
+     phone portrait  ≤ 640px           touch-first compact layout
+     small phone     ≤ 380px           tighter paddings
+     phone landscape (short viewport)  hero/dialog clamps
+     body.tv-mode    (Android only)    landscape, desktop-style, TV-sized
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* ── Phone portrait ─────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+    :root {
+        --sidebar: 56px;
+    }
+
+    .sidebar {
+        padding: 10px 0;
+        gap: 4px;
+    }
+    .sidebar-btn {
+        min-width: 44px;
+        min-height: 44px;          /* touch target */
+    }
+    .sidebar-logo {
+        width: 36px;
+    }
+    /* hover-only tooltips are useless on touch — hide to avoid dead space */
+    .sidebar-btn .tooltip {
+        display: none;
+    }
+
+    .main {
+        margin-left: var(--sidebar);
+        height: 100vh;
+        height: 100dvh;            /* mobile browser chrome */
+    }
+
+    .hero {
+        height: clamp(220px, 62vw, 420px);
+    }
+
+    .cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
+    }
+
+    .episodes-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 8px;
+    }
+
+    .api-status-banner {
+        font-size: 13px;
+    }
+}
+
+/* ── Small phones ───────────────────────────────────────────────────────── */
+@media (max-width: 380px) {
+    .cards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+        gap: 8px;
+    }
+    :root {
+        --sidebar: 52px;
+    }
+}
+
+/* ── Phone landscape (generic) ──────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 520px) {
+    .hero {
+        height: clamp(280px, 78vh, 480px);
+    }
+}
+
+/* ── TV MODE (Android, landscape-locked) ──────────────────────────────────
+   Desktop-style layout tuned for a TV/controller: larger cards, larger
+   targets, and the existing gamepad focus ring kept prominent.           */
+body.tv-mode {
+    --sidebar: 84px;
+}
+body.tv-mode .sidebar {
+    padding: 18px 0;
+    gap: 8px;
+}
+body.tv-mode .sidebar-btn {
+    min-width: 56px;
+    min-height: 56px;
+}
+body.tv-mode .sidebar-logo {
+    width: 56px;
+}
+/* on TV, tooltips are useful for d-pad focus — keep them visible */
+body.tv-mode .sidebar-btn:focus .tooltip,
+body.tv-mode .sidebar-btn.gamepad-focused .tooltip {
+    opacity: 1;
+}
+body.tv-mode .main {
+    height: 100vh;
+}
+body.tv-mode .hero {
+    height: clamp(420px, 64vh, 640px);
+}
+body.tv-mode .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 20px;
+}
+body.tv-mode .episodes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+}
+/* keyboard/d-pad/gamepad focus must be obvious on a TV */
+body.tv-mode :focus-visible {
+    outline: 3px solid var(--red);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+body.tv-mode button,
+body.tv-mode a {
+    min-height: 44px;
+}
+
+/* ── Global overflow guard (all platforms) ──────────────────────────────── */
+img,
+video {
+    max-width: 100%;
+}
+
+/* ── TV MODE confirmation dialog ────────────────────────────────────────── */
+.tv-mode-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    padding: 20px;
+}
+
+.tv-mode-confirm {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 26px;
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--red-glow);
+}
+
+.tv-mode-confirm-icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+
+.tv-mode-confirm-title {
+    font-family: var(--font-display);
+    font-size: 30px;
+    letter-spacing: 2px;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.tv-mode-confirm-text {
+    color: var(--text2);
+    font-size: 15px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+
+.tv-mode-confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.tv-mode-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 12px 26px;
+    min-height: 44px;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text);
+    background: var(--surface2);
+    transition: transform 0.12s ease, background 0.12s ease;
+}
+.tv-mode-btn:hover {
+    transform: translateY(-1px);
+}
+.tv-mode-btn-primary {
+    background: var(--red);
+    color: #fff;
+}
+.tv-mode-btn-primary:hover {
+    background: var(--red2);
+}
+.tv-mode-btn-secondary {
+    background: var(--surface3);
+    color: var(--text2);
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+    .tv-mode-confirm {
+        padding: 16px 22px;
+    }
+    .tv-mode-confirm-icon {
+        font-size: 26px;
+        margin-bottom: 4px;
+    }
+    .tv-mode-confirm-title {
+        font-size: 22px;
+    }
+}

@@ -51,10 +51,6 @@ export function getAndroidSubtitleDir() {
     if (window.StreambertNative?.subtitleDir) {
       return window.StreambertNative.subtitleDir;
     }
-    // For Capacitor, the bridge will provide dir via async method, but sync fallback:
-    if (window.Capacitor) {
-      return "/sdcard/Download/StreambertSubs";
-    }
   }
   return "/sdcard/Download/StreambertSubs";
 }

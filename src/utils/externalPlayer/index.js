@@ -17,4 +17,4 @@ export * from "./androidNativeProxy.js";
 export { ExternalPlayerAdapter, externalPlayerAdapter, launchInExternalPlayer } from "./externalPlayerAdapter.js";
 
 // Platform utilities (pure, no Electron/Termux in Android path)
-export { getPlatform, isAndroid, isDesktop, isCapacitorAndroid, isPureAndroidRuntime, getPlaybackMode, setPlaybackMode, shouldUseExternalPlayer, PLATFORM, PLAYBACK_MODE } from "../platform.js";
+export { getPlatform, isAndroid, isDesktop, isPureAndroidRuntime, getPlaybackMode, setPlaybackMode, shouldUseExternalPlayer, PLATFORM, PLAYBACK_MODE } from "../platform.js";

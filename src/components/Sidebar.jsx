@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { imgUrl } from "../utils/api";
+import { isAndroid } from "../utils/platform";
 import { useSeasonalEvent } from "../components/seasonalEvents.jsx";
 import {
   StreambertLogo,
@@ -12,6 +13,7 @@ import {
   QuitIcon,
   BackIcon,
   HelpIcon,
+  TvIcon,
 } from "./Icons";
 
 export default function Sidebar({
@@ -25,6 +27,8 @@ export default function Sidebar({
   canGoBack,
   onBack,
   onShowShortcuts,
+  tvMode,
+  onToggleTvMode,
 }) {
   const [dragOver, setDragOver] = useState(null);
   const dragItem = useRef(null);
@@ -129,13 +133,15 @@ export default function Sidebar({
         icon={<HistoryIcon />}
         label="Library & History"
       />
-      <SideBtn
-        active={page === "downloads"}
-        onClick={() => onNavigate("downloads")}
-        icon={<DownloadsQueueIcon />}
-        label="Downloads"
-        badge={activeDownloads > 0 ? activeDownloads : null}
-      />
+      {!isAndroid() && (
+        <SideBtn
+          active={page === "downloads"}
+          onClick={() => onNavigate("downloads")}
+          icon={<DownloadsQueueIcon />}
+          label="Downloads"
+          badge={activeDownloads > 0 ? activeDownloads : null}
+        />
+      )}
 
       <div className="sidebar-sep" />
 
@@ -217,6 +223,14 @@ export default function Sidebar({
       )}
 
       <div className="sidebar-bottom">
+        {isAndroid() && (
+          <SideBtn
+            active={!!tvMode}
+            onClick={onToggleTvMode}
+            icon={<TvIcon />}
+            label={tvMode ? "Exit TV Mode" : "TV Mode"}
+          />
+        )}
         <SideBtn
           onClick={onShowShortcuts}
           icon={<HelpIcon />}
@@ -228,15 +242,17 @@ export default function Sidebar({
           icon={<SettingsIcon />}
           label="Settings"
         />
-        <button
-          className="sidebar-btn"
-          onClick={() => window.electron?.quitApp?.()}
-          title="Quit App"
-          style={{ color: "#e53e3e", marginTop: 4 }}
-        >
-          <QuitIcon />
-          <span className="tooltip">Quit App</span>
-        </button>
+        {!isAndroid() && (
+          <button
+            className="sidebar-btn"
+            onClick={() => window.electron?.quitApp?.()}
+            title="Quit App"
+            style={{ color: "#e53e3e", marginTop: 4 }}
+          >
+            <QuitIcon />
+            <span className="tooltip">Quit App</span>
+          </button>
+        )}
       </div>
     </div>
   );

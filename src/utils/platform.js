@@ -9,20 +9,6 @@ export const PLATFORM = {
 
 // Pure detection helpers — no Node/Electron in Android path
 
-export function isCapacitor() {
-  return typeof window !== "undefined" && !!window.Capacitor;
-}
-
-export function isCapacitorAndroid() {
-  if (!isCapacitor()) return false;
-  try {
-    if (window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-      const p = window.Capacitor.getPlatform?.();
-      return p === "android";
-    }
-  } catch {}
-  return false;
-}
 
 export function isElectronRenderer() {
   return typeof window !== "undefined" && !!window.electron;
@@ -31,14 +17,13 @@ export function isElectronRenderer() {
 export function isAndroidWebView() {
   if (typeof window === "undefined") return false;
   // Check for Android bridge injected by native WebView (Capacitor or custom)
-  if (window.Capacitor && isCapacitorAndroid()) return true;
   // Check for custom native bridge (future APK)
   if (window.StreambertNative && window.StreambertNative.platform === "android") return true;
   // Check user agent for Android + existence of native bridge (not Termux)
   const ua = navigator.userAgent || "";
   if (/Android/i.test(ua)) {
     // If we have any native bridge, treat as Android
-    if (window.AndroidBridge || window.StreambertNative || isCapacitorAndroid()) {
+    if (window.AndroidBridge || window.StreambertNative) {
       return true;
     }
     // For pure web testing, allow override via localStorage
@@ -52,7 +37,7 @@ export function isAndroidWebView() {
 
 export function getPlatform() {
   // Priority: Capacitor Android > Custom Native Android > Electron > Web
-  if (isCapacitorAndroid() || isAndroidWebView()) {
+  if (isAndroidWebView()) {
     return PLATFORM.ANDROID;
   }
   if (isElectronRenderer()) {

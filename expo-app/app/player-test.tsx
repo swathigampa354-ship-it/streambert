@@ -2,17 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 
-// Import our Expo external player module (will be available in dev client)
-let ExternalPlayer: any = null;
-try {
-  ExternalPlayer = require('../modules/expo-external-player/src/index.ts');
-} catch {
-  try {
-    ExternalPlayer = require('../modules/expo-external-player/src/index');
-  } catch (e) {
-    console.log('[PlayerTest] ExternalPlayer module not available in Expo Go, need dev client');
-  }
-}
+// Import our Expo external player module - it is a file: dependency
+// (expo-external-player) and autolinked in dev-client builds.
+// In Expo Go the module's own requireNativeModule guard falls back gracefully.
+import * as ExternalPlayerModule from 'expo-external-player';
+const ExternalPlayer: any = ExternalPlayerModule;
 
 // Fallback implementation for Expo Go testing
 const fallbackModule = {

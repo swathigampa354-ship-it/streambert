@@ -1,9 +1,0 @@
-{
-  "appId": "com.truelockmc.streambert",
-  "appName": "Streambert",
-  "webDir": "dist",
-  "bundledWebRuntime": false,
-  "plugins": {
-    "ExternalPlayer": {}
-  }
-}

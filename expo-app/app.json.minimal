@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Streambert",
+    "slug": "streambert-android",
+    "version": "2.6.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "streambert",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.truelockmc.streambert",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 21,
+            "targetSdkVersion": 34,
+            "compileSdkVersion": 34
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "87b68f14-d33e-4ca6-91db-a0c97f85764e"
+      }
+    },
+    "owner": "bjvgghb777s-team"
+  }
+}

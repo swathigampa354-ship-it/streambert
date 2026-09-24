@@ -1,0 +1,47 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'maven-publish'
+
+group = 'expo.modules.externalplayer'
+version = '1.0.0'
+
+buildscript {
+  def expoModulesCorePlugin = new File([Node, "--print", "require.resolve('expo-modules-core/android/build.gradle')"].execute(null, rootDir).text.trim())
+  apply from: expoModulesCorePlugin
+  apply from: expoModulesCorePlugin.getParentFile().getParentFile().getParentFile().getAbsolutePath() + "/expo-module-gradle-plugin/build.gradle"
+  if (new File([Node, "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()).exists()) {
+    apply from: [Node, "--print", "require.resolve('expo-module-scripts/android/build.gradle')"].execute(null, rootDir).text.trim()
+  }
+}
+
+apply plugin: 'expo-module-plugin'
+
+android {
+  compileSdkVersion safeExtGet('compileSdkVersion', 34)
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = JavaVersion.VERSION_17.majorVersion
+  }
+
+  namespace "expo.modules.externalplayer"
+  defaultConfig {
+    minSdkVersion safeExtGet('minSdkVersion', 21)
+    targetSdkVersion safeExtGet('targetSdkVersion', 34)
+    versionCode 1
+    versionName "1.0.0"
+  }
+  publishing {
+    singleVariant("release") {
+      withSourcesJar()
+    }
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+}

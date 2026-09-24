@@ -2,6 +2,7 @@
 // Pure-native Android external player bridge, no Electron/Termux
 
 import { NativeModulesProxy, requireNativeModule } from 'expo-modules-core';
+import { Linking } from 'react-native';
 
 let ExternalPlayerModule: any = null;
 
@@ -136,6 +137,18 @@ export async function getSubtitleDirNative(): Promise<string> {
 }
 
 /**
+ * Check whether a file path exists on the device filesystem
+ */
+export async function fileExistsNative(path: string): Promise<boolean> {
+  if (!ExternalPlayerModule || !path) return false;
+  try {
+    return !!(await ExternalPlayerModule.fileExists(path));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if native bridge available
  */
 export function isNativeBridgeAvailable(): boolean {
@@ -169,12 +182,10 @@ function buildIntentUri(options: LaunchOptions): string {
   return uri;
 }
 
-async function launchViaIntentUri(options: LaunchOptions): Promise<{ success: boolean; opener: string }> {
+async function launchViaIntentUri(options: LaunchOptions): Promise<{ success: boolean; opener?: string }> {
   const uri = buildIntentUri(options);
   console.log('[ExpoExternalPlayer] Intent URI:', uri);
   try {
-    // For Expo, use Linking
-    const { Linking } = await import('react-native');
     const canOpen = await Linking.canOpenURL(uri);
     if (canOpen) {
       await Linking.openURL(uri);
@@ -199,5 +210,6 @@ export default {
   stopProxyNative,
   downloadSubtitleNative,
   getSubtitleDirNative,
+  fileExistsNative,
   isNativeBridgeAvailable,
 };
