@@ -1,11 +1,9 @@
 node_modules/
 temp/
 download_config.ini
-dist/
+/dist/
 *.zip
 *secret.txt
-!expo-app/assets/dist/
-!expo-app/assets/dist/**
 
 # local build artifacts
 build/
