@@ -48,7 +48,7 @@
         "projectId": "87b68f14-d33e-4ca6-91db-a0c97f85764e"
       }
     },
-    "owner": "bjvgghb777s-team",
+    "permissions": ["INTERNET"],
     "platforms": [
       "android"
     ]
