@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
 
 /**
  * Entry route.
@@ -15,19 +15,12 @@ import { useRouter } from 'expo-router';
 export default function HomeScreen() {
   const router = useRouter();
 
-  useEffect(() => {
-    if (!__DEV__) {
-      router.replace('/streambert');
-    }
-  }, [router]);
-
   if (!__DEV__) {
-    return (
-      <View style={styles.bootContainer}>
-        <ActivityIndicator size="large" color="#E50914" />
-        <Text style={styles.bootText}>Starting Streambert…</Text>
-      </View>
-    );
+    // Declarative redirect: resolved during render by the router, so the very
+    // first committed frame already has a valid route. The previous
+    // useEffect + router.replace() left a frame where no route matched,
+    // which surfaced as a blank/closing window on cold start.
+    return <Redirect href="/streambert" />;
   }
 
   return (
@@ -58,8 +51,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  bootContainer: { flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', alignItems: 'center' },
-  bootText: { color: '#fff', marginTop: 12, fontWeight: 'bold' },
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   content: { padding: 20, paddingBottom: 40 },
   title: { color: '#fff', fontSize: 26, fontWeight: 'bold', marginBottom: 4 },
