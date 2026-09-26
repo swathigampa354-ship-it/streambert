@@ -3,9 +3,7 @@
     "version": ">= 24.7.0",
     "appVersionSource": "remote"
   },
-  "android": {
-    "enableProguardInReleaseBuilds": false
-  },
+  "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
